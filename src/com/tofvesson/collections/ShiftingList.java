@@ -2,11 +2,13 @@ package com.tofvesson.collections;
 
 
 import java.util.*;
+import java.util.function.Predicate;
 
 public class ShiftingList<K, V> implements Map<K, V> {
 
     final ShiftingSet<K> keys;
     final ShiftingSet<V> values;
+    final UnchangingSet<Entry<K, V>> entrySet;
 
 
     public ShiftingList(int maxSize){
@@ -16,69 +18,108 @@ public class ShiftingList<K, V> implements Map<K, V> {
     public ShiftingList(int maxSize, float load){
         keys = new ShiftingSet<>(maxSize, load);
         values = new ShiftingSet<>(maxSize, load);
+        entrySet = new UnchangingSet<>(maxSize, load);
     }
 
 
     @Override
     public int size() {
-        return 0;
+        return keys.size();
     }
 
     @Override
     public boolean isEmpty() {
-        return true;
+        return keys.isEmpty();
     }
 
     @Override
     public boolean containsKey(Object key) {
-        return false;
+        return keys.contains(key);
     }
 
     @Override
     public boolean containsValue(Object value) {
-        return false;
+        return values.contains(value);
     }
 
     @Override
     public V get(Object key) {
-        return null;
+        int i = keys.indexOf(key);
+        return i!=-1?(V) values.set[i]:null;
     }
 
     @Override
     public V remove(Object key) {
-        return null;
+        int i = keys.indexOf(key);
+        if(i==-1) return null;
+        V v;
+        keys.remove(key);
+        values.remove(v=(V)values.set[i]);
+        return v;
     }
 
+    @SuppressWarnings({"unchecked", "MismatchedQueryAndUpdateOfCollection"})
     @Override
     public void putAll(Map m) {
-
+        ArrayList l = new ArrayList();
+        ArrayList l1 = new ArrayList();
+        m.keySet().stream().filter(this::isKey).forEach(l::add);
+        m.values().stream().filter(this::isValue).forEach(l1::add);
+        K[] k;
+        V[] v;
+        if(l.size()!=l1.size()){
+            if(l.size()<l1.size()){
+                v = (V[]) Arrays.copyOf(l1.toArray(), l.size());
+                k = (K[]) l.toArray();
+            }
+            else{
+                k = (K[]) Arrays.copyOf(l.toArray(), l1.size());
+                v = (V[]) l1.toArray();
+            }
+        }else{
+            k = (K[]) l.toArray();
+            v = (V[]) l1.toArray();
+        }
+        keys.addAll(Arrays.asList(k));
+        values.addAll(Arrays.asList(v));
+        ArrayList<ShiftingEntry<K, V>> l2 = new ArrayList<>();
+        for(int i = k.length-1; i>0; --i) l2.add(new ShiftingEntry<>(keys, values, i));
+        entrySet.addAll(l2);
     }
 
     @Override
     public void clear() {
-
+        keys.clear();
+        values.clear();
+        entrySet.clear();
     }
 
     @Override
     public Set<K> keySet() {
-
-        return null;
+        return keys;
     }
 
     @Override
     public Collection<V> values() {
-        return null;
+        return values;
     }
 
     @Override
     public Set<Entry<K, V>> entrySet() {
-        return null;
+        return entrySet;
     }
 
     @Override
     public V put(K key, V value) {
-        return null;
+        V v = null;
+        if(keys.contains(key)) v = (V) values.set[keys.indexOf(key)];
+        else keys.add(key);
+        values.add(value);
+        return v;
     }
+
+    public boolean isKey(Object o){ try{ K k = (K) o; return true; }catch(Exception e){} return false; }
+    public boolean isValue(Object o){ try{ V v = (V) o; return true; }catch(Exception e){} return false; }
 
 
     /**
@@ -86,7 +127,7 @@ public class ShiftingList<K, V> implements Map<K, V> {
      * @param <K>
      * @param <V>
      */
-    static class ShiftingEntry<K, V> implements Entry<K, V>{
+    protected static class ShiftingEntry<K, V> implements Entry<K, V>{
 
         private ShiftingSet<K> keys;
         private ShiftingSet<V> values;
@@ -116,12 +157,42 @@ public class ShiftingList<K, V> implements Map<K, V> {
         }
     }
 
-    static class ShiftingSet<E> implements Set<E>{
+    protected static class UnchangingSet<E> extends ShiftingSet<E>{
+
+        public UnchangingSet(int maxSize, float loadFactor) {
+            super(maxSize, loadFactor);
+        }
+
+        @Override
+        public boolean remove(Object o1) {
+            return false;
+        }
+
+        @Override
+        public boolean retainAll(Collection<?> c) {
+            return false;
+        }
+
+        @Override
+        public boolean removeAll(Collection<?> c) {
+            return false;
+        }
+
+        @Override
+        public boolean removeIf(Predicate<? super E> filter) {
+            return false;
+        }
+    }
+
+    protected static class ShiftingSet<E> implements Set<E>{
 
         Object[] set = new Object[1];
         final int maxSize;
         final float loadFactor;
-        int populatedEntries = 0;
+        int populatedEntries = 0, load = 1; // Defines currently populated entries
+        double avgLoad = 1;                 // Used to optimize allocation algorithm to -
+                                            // most adequately fit the average amount of elements
+                                            // stored during any one operation
 
         public ShiftingSet(int maxSize, float loadFactor){
             this.maxSize = maxSize<=0?20:maxSize;
@@ -165,10 +236,13 @@ public class ShiftingList<K, V> implements Map<K, V> {
         @Override
         public boolean add(E e) {
             if(contains(e)) return false;
+            ++load;
+            avgLoad = (avgLoad+1)/2;
             populatedEntries=populatedEntries<maxSize?populatedEntries+1:populatedEntries;
-            Object[] o = new Object[Math.min((int)(100/(100/populatedEntries*loadFactor)), maxSize)];                   // Dynamically update array size according to loadFactor and max Size
-            System.arraycopy(set, 1, o, 2, o.length - 2);
+            Object[] o = new Object[Math.min((int)(100/(100/(populatedEntries+avgLoad)*loadFactor)), maxSize)];                   // Dynamically update array size according to loadFactor and max Size
+            System.arraycopy(set, 0, o, 1, o.length!=maxSize?populatedEntries:populatedEntries-1);
             o[0] = e;
+            set = o;
             return true;
         }
 
@@ -205,18 +279,39 @@ public class ShiftingList<K, V> implements Map<K, V> {
                     l.add(e);
                 }
             if(l.size()==0) return false;
-            int tmp = populatedEntries;
+            ++load;
+            avgLoad = (avgLoad+l.size()*avgLoad/load)/2;     // Improve prediction using relative applied load (to a point)
+            int tmp = populatedEntries, cal;
             populatedEntries=populatedEntries+l.size()<maxSize?populatedEntries+l.size():maxSize;
-            Object[] o = new Object[Math.min((int)(100/(100/populatedEntries*loadFactor)), maxSize)];                   // Create new array
-            for(int i = l.size(); i>0; --i) if(i<o.length-1) o[l.size()-i] = l.get(i);                                  // Move new values to start of array relative to their position
-            if(l.size()<tmp) for(int i = 0; i<tmp-l.size(); ++i) if(l.size()+i<o.length) o[l.size()] = set[i];          // Move old values to relative location
-            set = o;                                                                                                    // Update reference
+            cal = (int) (100 / (100 / (populatedEntries + avgLoad) * loadFactor));
+            if(populatedEntries==tmp){ // Just use the pre-allocated space determined by the load factor
+                System.arraycopy(set, 0, set, l.size(), set.length-l.size());
+                System.arraycopy(l.toArray(), 0, set, 0, l.size()-1);
+            } else {
+                Object[] o = new Object[cal>=maxSize?maxSize:cal];                   // Create new array
+                for (int i = l.size(); i > 0; --i)
+                    if (i < o.length - 1)
+                        o[l.size() - i] = l.get(i);                                  // Move new values to start of array relative to their position
+                if (l.size() < tmp) for (int i = 0; i < tmp - l.size(); ++i)
+                    if (l.size() + i < o.length) o[l.size()] = set[i];          // Move old values to relative location
+                set = o;                                                                                                    // Update reference
+            }
             return true;
         }
 
         @Override
         public boolean retainAll(Collection<?> c) {
-            return false;
+            ArrayList<Object> l = new ArrayList<>();
+            for(Object e : c)
+                for (Object o : set)
+                    if (e.equals(o)){
+                        l.add(e);
+                        break;
+                    }
+            if(l.size() == 0 || set.length == l.size()) return false;
+            clear();
+            addAll((Collection<? extends E>) c);
+            return true;
         }
 
         @Override
@@ -244,20 +339,41 @@ public class ShiftingList<K, V> implements Map<K, V> {
          */
         void shift(){
             for(int i = 0; i<populatedEntries; ++i) if(set[i]==null) System.arraycopy(set,i+1,set,i,populatedEntries-i);// Shift populated slots towards the start of the array
+            for(int i = populatedEntries; i<set.length; ++i) set[i] = null;                                             // Remove accidental redundancies created when shifting
         }
 
         /**
          * Adapt array size according to populated elements and load factor.
          */
         void adaptLoad(){
-            if(((int)(100/(100/populatedEntries*loadFactor)))==set.length) return;
+            if(((int)(100/(100/(populatedEntries+avgLoad)*loadFactor)))>=set.length &&
+                    ((int)(100/(100/populatedEntries+(avgLoad/2)*loadFactor)))<=set.length) return; // Array is roughly the right size
             Object[] o = new Object[Math.min((int)(100/(100/populatedEntries*loadFactor)), maxSize)];
             System.arraycopy(set, 0, o, 0, o.length);
             set = o;
         }
+
+        /**
+         * Reset prediction algorithm judgement.
+         * (Makes newly stored values more valuable when accounting for free space)
+         */
+        public void resetLoadCount(){ load = 0; }
+
+        /**
+         * Reset whole prediction algorithm.
+         * May cause RAM to suffer at the expense of better processing times.
+         */
+        public void resetLoadAlgo(){ load = 0; avgLoad = 2; }
+
+
+        public int indexOf(Object o){
+            for(int i = 0; i<populatedEntries; ++i)
+                if(o.equals(set[i])) return i;
+            return -1;
+        }
     }
 
-    static class ShiftingIterator<E> implements Iterator<E>{
+    protected static class ShiftingIterator<E> implements Iterator<E>{
 
         private final ShiftingSet<E> s;
         private int ctr = -1;
