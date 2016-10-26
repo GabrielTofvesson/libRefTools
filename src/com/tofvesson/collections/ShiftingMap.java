@@ -4,18 +4,18 @@ package com.tofvesson.collections;
 import java.util.*;
 import java.util.function.Predicate;
 
-public class ShiftingList<K, V> implements Map<K, V> {
+public class ShiftingMap<K, V> implements Map<K, V> {
 
     final ShiftingSet<K> keys;
     final ShiftingSet<V> values;
     final UnchangingSet<Entry<K, V>> entrySet;
 
 
-    public ShiftingList(int maxSize){
+    public ShiftingMap(int maxSize){
         this(maxSize, 0.75f);
     }
 
-    public ShiftingList(int maxSize, float load){
+    public ShiftingMap(int maxSize, float load){
         keys = new ShiftingSet<>(maxSize, load);
         values = new ShiftingSet<>(maxSize, load);
         entrySet = new UnchangingSet<>(maxSize, load);
@@ -63,8 +63,7 @@ public class ShiftingList<K, V> implements Map<K, V> {
     public void putAll(Map m) {
         ArrayList l = new ArrayList();
         ArrayList l1 = new ArrayList();
-        m.keySet().stream().filter(this::isKey).forEach(l::add);
-        m.values().stream().filter(this::isValue).forEach(l1::add);
+        m.keySet().stream().filter((k)-> this.isKey(k)&& this.isValue(m.get(k))).forEach((v)->{ l.add(v); l1.add(m.get(v)); });
         K[] k;
         V[] v;
         if(l.size()!=l1.size()){
