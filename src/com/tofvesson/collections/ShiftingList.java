@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-@SuppressWarnings("unchecked")
+@SuppressWarnings({"unchecked", "ReturnOfInnerClass"})
 public class ShiftingList<E> implements List<E> {
     /**
      * Holder for entries. Dur to reasons, the array holds objects.
@@ -257,19 +257,15 @@ public class ShiftingList<E> implements List<E> {
     }
 
     @Override
-    public Iterator<E> iterator(){
-        return new Iterator<>();
-    }
+    public Iterator<E> iterator(){ return new Iterator<>(pop, entries); }
 
     @Override
-    public ListIterator<E> listIterator() {
-        return new ListIterator<>();
-    }
+    public ListIterator<E> listIterator(){ return new ListIterator<>(this); }
 
     @Override
     public ListIterator<E> listIterator(int index) {
         if(index<0) throw new RuntimeException("Invalid starting point for iterator defined: "+index);
-        return new ListIterator<>(index);
+        return new ListIterator<>(this, index);
     }
 
     @Override
@@ -280,75 +276,40 @@ public class ShiftingList<E> implements List<E> {
         return l;
     }
 
-    public class Iterator<V> implements java.util.Iterator<V>{
-
-        int counter = 0;
-
-        @Override
-        public boolean hasNext() {
-            return counter<ShiftingList.this.pop;
-        }
-
-        @Override
-        public V next() {
-            return entries[counter++]==empty?null:(V)entries[counter];
-        }
+    /**
+     * Standard iterator. For observing list.
+     * @param <V> Type of object stored in list.
+     */
+    public static class Iterator<V> implements java.util.Iterator<V>{
+        protected int counter = 0;
+        private final int pop;
+        private final Object[] entries;
+        public Iterator(int pop, Object[] entries){ this.pop = pop; this.entries = entries; }
+        @Override public boolean hasNext() { return counter<pop; }
+        @Override public V next() { return entries[counter++]==empty?null:(V)entries[counter]; }
     }
 
-    public class ListIterator<V> implements java.util.ListIterator<V>{
-
+    /**
+     * List iterator. For making modifications on-the-go while going through list.
+     * @param <V> Type of object stored in list.
+     */
+    public static class ListIterator<V> implements java.util.ListIterator<V>{
         protected int counter = 0;
         protected boolean opNxt = false;
         private Object pEl = null;
-
-        public ListIterator(){}
-        public ListIterator(int start){ counter = start; }
-
-        @Override
-        public boolean hasNext() {
-            return counter<ShiftingList.this.pop;
-        }
-
-        @Override
-        public V next() {
-            opNxt = true;
-            return (V)(pEl=entries[counter++]==empty?null:entries[counter-1]);
-        }
-
-        @Override
-        public boolean hasPrevious() {
-            return counter>0&&ShiftingList.this.pop!=0;
-        }
-
-        @Override
-        public V previous() {
-            opNxt = false;
-            return (V)(pEl=entries[--counter]==empty?null:entries[counter]);
-        }
-
-        @Override
-        public int nextIndex() {
-            return counter+1<pop?counter+1:pop;
-        }
-
-        @Override
-        public int previousIndex() {
-            return counter!=0?counter-1:0;
-        }
-
-        @Override
-        public void remove() {
-            ShiftingList.this.remove(counter-(opNxt?0:1));
-        }
-
-        @Override
-        public void set(V v) {
-            if(pEl==entries[counter-(opNxt?0:1)]) entries[counter-(opNxt?0:1)] = v==null?empty:v;
-        }
-
-        @Override
-        public void add(V v) {
-            ShiftingList.this.add(counter, (E)v);
-        }
+        private final int pop;
+        private final Object[] entries;
+        private final ShiftingList list;
+        public ListIterator(ShiftingList list){ this.pop = list.pop; this.entries = list.entries; this.list = list;}
+        public ListIterator(ShiftingList list, int start){ this(list); counter = start; }
+        @Override public boolean hasNext() { return counter<pop; }
+        @Override public V next() { opNxt = true; return (V)(pEl=entries[counter++]==empty?null:entries[counter-1]); }
+        @Override public boolean hasPrevious() { return counter>0&&pop!=0; }
+        @Override public V previous() { opNxt = false; return (V)(pEl=entries[--counter]==empty?null:entries[counter]); }
+        @Override public int nextIndex() { return counter+1<pop?counter+1:pop; }
+        @Override public int previousIndex() { return counter!=0?counter-1:0; }
+        @Override public void remove() { list.remove(counter-(opNxt?0:1)); }
+        @Override public void set(V v) { if(pEl==entries[counter-(opNxt?0:1)]) entries[counter-(opNxt?0:1)] = v==null?empty:v; }
+        @Override public void add(V v) { list.add(counter, v); }
     }
 }
