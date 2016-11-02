@@ -20,18 +20,32 @@ public class Async {
      */
     public Async(final Object o, final Method method, final Object... params){
         method.setAccessible(true);
-        //Lambdas are compiled into more methods than anonymous class and don't decrease overhead
-        //noinspection Convert2Lambda
-        task = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                synchronized (this) { try { ret = method.invoke(o, params); complete = true; }
-                catch (Throwable t1) { if(!failed) { failed = true; t=t1; } } }
-            }
+        task = new Thread(()-> {
+            synchronized (this) { try { ret = method.invoke(o, params); complete = true; } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } } }
         });
         task.setDaemon(true);
         task.start();
     }
+
+    /**
+     * Dispatches an asynchronous call to supplied method on specified object with no parameters.
+     * @param o Object to call method on.
+     * @param m Method to call. Must be parameter-less!
+     */
+    public Async(Object o, Method m){ this(o, m, (Object[]) null); }
+
+    /**
+     * Dispatches an asynchronous call to supplied static method.
+     * @param m Static method to call.
+     * @param params Parameters to supply to method.
+     */
+    public Async(Method m, Object... params){ this(null, m, params); }
+
+    /**
+     * Dispatches an asynchronous, static, parameter-less method call.
+     * @param m Method to call.
+     */
+    public Async(Method m){ this(null, m, (Object[]) null); }
 
     /**
      * Create a new async task for instantiating an object.

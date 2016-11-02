@@ -44,6 +44,7 @@ public class SafeReflection {
      * @return Return value of method or null if method is null.
      */
     public static Object invokeMethod(Object inst, Method m, Object... params){
+        if(m!=null) m.setAccessible(true);
         try{ return m!=null?m.invoke(inst, params):null; }catch(Exception e){}
         return null;
     }
