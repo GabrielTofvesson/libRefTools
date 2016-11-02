@@ -124,4 +124,11 @@ public class SafeReflection {
      * @return True if class is nested otherwise false.
      */
     public static boolean isNestedClass(Class<?> c){ return c.getEnclosingClass()!=null; }
+
+    /**
+     * Get class file based on class name.
+     * @param c Class to find file of.
+     * @return File if class file exists.
+     */
+    public static java.io.File getClassFile(Class c){ return new java.io.File(c.getResource(c.getSimpleName()+".class").getFile()); }
 }
