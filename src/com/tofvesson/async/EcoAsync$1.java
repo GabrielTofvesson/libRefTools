@@ -25,6 +25,7 @@ class EcoAsync$1 implements Runnable{
         synchronized (this) {
             try {
                 this$0.ret = val$method.invoke(val$o, val$params);
+                this$0.complete = true;
             } catch (Throwable t1) {
                 if(!this$0.failed)
                 {
