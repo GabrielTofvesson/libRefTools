@@ -3,11 +3,11 @@ package com.tofvesson.async;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 
-@SuppressWarnings({"WeakerAccess", "unused"})
-public class Async {
+@SuppressWarnings({"WeakerAccess", "unused", "unchecked"})
+public class Async<T> {
 
     Thread task;
-    volatile Object ret; // Assigned using native method
+    volatile T ret; // Assigned using native method
     volatile boolean complete = false, failed = false; // Used by anonymous class, therefore not private
     volatile Throwable t;
 
@@ -21,7 +21,7 @@ public class Async {
     public Async(final Object o, final Method method, final Object... params){
         method.setAccessible(true);
         task = new Thread(()-> {
-            synchronized (this) { try { ret = method.invoke(o, params); complete = true; } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } } }
+            synchronized (this) { try { ret = (T) method.invoke(o, params); complete = true; } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } } }
         });
         task.setDaemon(true);
         task.start();
@@ -52,19 +52,20 @@ public class Async {
      * @param c Constructor to use when instantiating object.
      * @param params Parameters to use when instantiaing object.
      */
-    public Async(final Constructor c, final Object... params){
+    public Async(final Constructor<T> c, final Object... params){
         c.setAccessible(true);
-        //Lambdas are compiled into more methods than anonymous class and don't decrease overhead
-        //noinspection Convert2Lambda
-        task = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                synchronized (this) { try { ret = c.newInstance(params); } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } } }
-            }
+        task = new Thread(() -> {
+            synchronized (this) { try { ret = c.newInstance(params); complete = true; } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } } }
         });
         task.setDaemon(true);
         task.start();
     }
+
+    /**
+     * Dispatch an asynchronous construction of the object corresponding to the passed constructor with no parameters.
+     * @param c Constructor to call.
+     */
+    public Async(Constructor<T> c){ this(c, (Object[]) null); }
 
     Async() {task = null;} // Only package-scoped because it should only be used when overriding standard construction
 
@@ -72,7 +73,7 @@ public class Async {
      * Await completion of async task. Blocks thread if task isn't complete.
      * @return Return value from async method call. Return is null if {@link #cancel()} is called before this method and async task wan't finished.
      */
-    public Object await(){
+    public T await(){
         //noinspection StatementWithEmptyBody
         while(!failed && !complete); // Check using variables rather than checking if worker thread is alive since method calls are more computationally expensive
         if(ret==null && t!=null) throw new RuntimeException(t); // Detect a unique error state, get error and throw in caller thread
