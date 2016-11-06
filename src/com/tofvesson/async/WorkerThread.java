@@ -93,6 +93,6 @@ public class WorkerThread extends Thread {
      */
     public void stopForced(){
         alive = false;
-        interrupt();
+        stop();
     }
 }

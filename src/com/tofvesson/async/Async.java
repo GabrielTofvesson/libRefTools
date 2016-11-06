@@ -21,7 +21,7 @@ public class Async<T> {
     public Async(final Object o, final Method method, final Object... params){
         method.setAccessible(true);
         task = new Thread(()-> {
-            synchronized (this) { try { ret = (T) method.invoke(o, params); complete = true; } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } } }
+            try { ret = (T) method.invoke(o, params); complete = true; } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } }
         });
         task.setDaemon(true);
         task.start();
@@ -55,7 +55,7 @@ public class Async<T> {
     public Async(final Constructor<T> c, final Object... params){
         c.setAccessible(true);
         task = new Thread(() -> {
-            synchronized (this) { try { ret = c.newInstance(params); complete = true; } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } } }
+            try { ret = c.newInstance(params); complete = true; } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } }
         });
         task.setDaemon(true);
         task.start();
@@ -96,7 +96,7 @@ public class Async<T> {
             // being propagated and thrown in the main thread
             t=null;
             failed = true; // Creates a unique and identifiable state
-            task.interrupt();
+            task.stop();
         }
     }
 }
