@@ -17,7 +17,7 @@ public class Async<T> {
      * @param o Object to invoke method on.
      * @param method Method to invoke.
      * @param params Required parameters.
-     */
+     */6
     public Async(final Object o, final Method method, final Object... params){
         method.setAccessible(true);
         task = new Thread(()-> {
@@ -67,7 +67,10 @@ public class Async<T> {
      */
     public Async(Constructor<T> c){ this(c, (Object[]) null); }
 
-    Async() {task = null;} // Only package-scoped because it should only be used when overriding standard construction
+    /**
+     * WARNING: Package-scoped because it should only be used when overriding standard construction. Should not bw used haphazardly!
+     */
+    Async() {task = null;}
 
     /**
      * Await completion of async task. Blocks thread if task isn't complete.
