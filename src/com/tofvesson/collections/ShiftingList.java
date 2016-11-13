@@ -1,6 +1,7 @@
 package com.tofvesson.collections;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -188,6 +189,7 @@ public class ShiftingList<E> implements List<E> {
         }
         Object[] o = new Object[(int) Math.max(1, Math.min((pop+accountFor)/load, maxSize))];                           // Load adaptation algorithm capping at maxSize or 0
         System.arraycopy(entries, 0, o, 0, Math.min(o.length, entries.length));                                         // Move as many entries as possible
+        entries = o;
     }
 
     /**
@@ -205,7 +207,7 @@ public class ShiftingList<E> implements List<E> {
     }
 
     protected void preparePopulate(int accountFor){
-        if(accountFor>entries.length) adaptLoad(accountFor);                                                            // If new elements exceed limit, adapt load
+        if(accountFor+pop>entries.length) adaptLoad(accountFor);                                                        // If new elements exceed limit, adapt load
         if(accountFor>entries.length) return;                                                                           // No need to delete elements if new values exceed limit
         System.arraycopy(entries, 0, entries, accountFor, entries.length-accountFor);                                   // Shift array elements to account for new elements
     }
@@ -286,7 +288,7 @@ public class ShiftingList<E> implements List<E> {
         private final Object[] entries;
         public Iterator(int pop, Object[] entries){ this.pop = pop; this.entries = entries; }
         @Override public boolean hasNext() { return counter<pop; }
-        @Override public V next() { return entries[counter++]==empty?null:(V)entries[counter]; }
+        @Override public V next() { return entries[counter++]==empty?null:(V)entries[counter-1]; }
     }
 
     /**

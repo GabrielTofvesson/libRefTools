@@ -1,5 +1,6 @@
 package com.tofvesson.reflection;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -8,6 +9,38 @@ import java.lang.reflect.Method;
  */
 @SuppressWarnings("unused")
 public class SafeReflection {
+
+    /**
+     * Gets the constructor from the defined class with the specified parameters.
+     * @param c Class to get constructor from.
+     * @param params Definition of parameters that the constructor requires.
+     * @param <T> Return-type of constructor.
+     * @return Constructor with specified parameter requirements or null if constructor doesn't exist.
+     */
+    public static <T> Constructor<T> getConstructor(Class<T> c, Class<?>... params){
+        try{
+            Constructor<T> c1 = c.getConstructor(params);
+            c1.setAccessible(true);
+            return c1;
+        }catch(Exception e){}
+        return null;
+    }
+
+    /**
+     * Gets the first constructor available from the given class.
+     * @param c Class to get constructor from.
+     * @param <T> Return-type of constructor.
+     * @return Constructor or null if something goes horribly wrong.
+     */
+    public static <T> Constructor<T> getFirstConstructor(Class<T> c){
+        try {
+            Constructor<T> c1 = (Constructor<T>) c.getDeclaredConstructors()[0];
+            c1.setAccessible(true);
+            return c1;
+        }catch (Exception e){}
+        return null;
+    }
+
     /**
      * Gets the method from the defined class by name and parameters.
      * Method is accessible.
