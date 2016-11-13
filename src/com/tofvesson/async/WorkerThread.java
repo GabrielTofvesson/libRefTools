@@ -56,7 +56,7 @@ public class WorkerThread extends Thread {
      * @param params Parameters for method.
      * @return A UID corresponding to the queued instruction.
      */
-    public long enqueue(Object invokeOn, Method m, Object... params){
+    public long push(Object invokeOn, Method m, Object... params){
         m.setAccessible(true);
         long id;
         do{ id = ThreadLocalRandom.current().nextLong(); }while(ids.contains(id));
@@ -73,6 +73,7 @@ public class WorkerThread extends Thread {
     public Object pop(long id){
         if(!ids.contains(id)) return null;
         if(Thread.currentThread() == this) throw new RuntimeException("Attempting to await result in worker thread! This causes the thread to lock.");
+        //noinspection StatementWithEmptyBody
         while(!output.containsKey(id)) ; // Block caller thread until result is received
         Object o = output.get(id);
         output.remove(id);
@@ -93,6 +94,7 @@ public class WorkerThread extends Thread {
      */
     public void stopForced(){
         alive = false;
+        //noinspection deprecation
         stop();
     }
 }

@@ -6,9 +6,24 @@ import java.lang.reflect.Method;
 @SuppressWarnings({"WeakerAccess", "unused", "unchecked"})
 public class Async<T> {
 
+    /**
+     * Thread running background task.
+     */
     Thread task;
-    volatile T ret; // Assigned using native method
+
+    /**
+     * Return value/ constructed object.
+     */
+    volatile T ret;
+
+    /**
+     * Status indicators.
+     */
     volatile boolean complete = false, failed = false; // Used by anonymous class, therefore not private
+
+    /**
+     * Exception to throw in case something goes wrong.
+     */
     volatile Throwable t;
 
     /**
@@ -19,12 +34,20 @@ public class Async<T> {
      * @param params Required parameters.
      */
     public Async(final Object o, final Method method, final Object... params){
-        method.setAccessible(true);
-        task = new Thread(()-> {
-            try { ret = (T) method.invoke(o, params); complete = true; } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } }
+        method.setAccessible(true); // Ensure that no crash occurs
+        task = new Thread(()-> { // Create a new thread
+            try {
+                ret = (T) method.invoke(o, params); // Invoke given method
+                complete = true;                    // Notify all threads who are checking
+            } catch (Throwable t1) {                // Prepare for failure
+                if(!failed) {                       // Checks if task was canceled
+                    failed = true;                  // Notifies all threads that task failed
+                    t=t1;                           // Makes error accessible to be thrown
+                }
+            }
         });
-        task.setDaemon(true);
-        task.start();
+        task.setDaemon(true);                       // Ensure that process dies with program
+        task.start();                               // Start task
     }
 
     /**
@@ -53,12 +76,20 @@ public class Async<T> {
      * @param params Parameters to use when instantiaing object.
      */
     public Async(final Constructor<T> c, final Object... params){
-        c.setAccessible(true);
-        task = new Thread(() -> {
-            try { ret = c.newInstance(params); complete = true; } catch (Throwable t1) { if(!failed) { failed = true; t=t1; } }
+        c.setAccessible(true);                  // Ensure that constructor can be called
+        task = new Thread(() -> {               // Creates a new thread for asynchronous execution
+            try {
+                ret = c.newInstance(params);    // Create a new instance: invoke "<init>" method
+                complete = true;                // Notify all threads that async is finished
+            } catch (Throwable t1) {            // Handle crash
+                if(!failed) {                   // Ensure that crash wasn't called by cancel()
+                    failed = true;              // Notify all threads that error has been encountered
+                    t=t1;                       // Make throwable accessible to be thrown in caller thread
+                }
+            }
         });
-        task.setDaemon(true);
-        task.start();
+        task.setDaemon(true);                   // Ensure that thread dies with program
+        task.start();                           // Start construction
     }
 
     /**
@@ -67,7 +98,10 @@ public class Async<T> {
      */
     public Async(Constructor<T> c){ this(c, (Object[]) null); }
 
-    Async() {task = null;} // Only package-scoped because it should only be used when overriding standard construction
+    /**
+     * WARNING: Package-scoped because it should only be used when overriding standard construction. Should not bw used haphazardly!
+     */
+    Async() {task = null;}
 
     /**
      * Await completion of async task. Blocks thread if task isn't complete.
@@ -85,18 +119,19 @@ public class Async<T> {
      * Checks if async task is still running.
      * @return True if it's still running.
      */
-    public boolean isAlive(){ return task.isAlive(); }
+    public boolean isAlive(){ return task.isAlive(); } // Check if thread is still alive which directly determines if process is alive since Async is a wrapper of Thread
 
     /**
      * Cancels async operation if it's still alive.
      */
     public void cancel(){
         if(task.isAlive()){
-            // Set values before interrupting to prevent InterruptedException from
-            // being propagated and thrown in the main thread
+                            // Set values before interrupting to prevent InterruptedException from
+                            // being propagated and thrown in the main thread
             t=null;
-            failed = true; // Creates a unique and identifiable state
-            task.stop();
+            failed = true;  // Creates a unique and identifiable state
+                            //noinspection deprecation
+            task.stop();    // Force-stop thread
         }
     }
 }

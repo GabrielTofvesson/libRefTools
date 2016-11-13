@@ -4,8 +4,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
-@SuppressWarnings({"unchecked", "ReturnOfInnerClass"})
+@SuppressWarnings({"unchecked", "ReturnOfInnerClass", "unused"})
 public class ShiftingList<E> implements List<E> {
     /**
      * Holder for entries. Dur to reasons, the array holds objects.
@@ -55,7 +56,7 @@ public class ShiftingList<E> implements List<E> {
     @Override
     public boolean contains(Object o) {
         if(o==empty) return false;
-        for(Object o1 : entries) if(o.equals(o1)) return true;
+        for(int i = 0; i<pop; ++i) if((o!=null && o.equals(entries[i])) || (o==null && entries[i]==empty)) return true;
         return false;
     }
 
@@ -75,6 +76,7 @@ public class ShiftingList<E> implements List<E> {
 
     @Override
     public boolean add(E e) {
+        if(contains(e)) return false;
         preparePopulate(1);
         entries[0] = e!=null?e:empty;
         pop=pop!=maxSize?pop+1:pop;
@@ -104,28 +106,25 @@ public class ShiftingList<E> implements List<E> {
 
     @Override
     public boolean addAll(Collection<? extends E> c) {
-        ArrayList<? extends E> l = new ArrayList<>(c);
-        preparePopulate(c.size());
-        for(int i = 0; i<Math.min(entries.length, c.size()); ++i) entries[i] = l.get(i);
-        pop=Math.min(pop+c.size(), maxSize);
+        ArrayList<? super E> l = c.stream().filter(e -> !contains(e)).collect(Collectors.toCollection(ArrayList::new));
+        if(l.size()>maxSize) for(int i = maxSize; i<l.size(); ++i) l.remove(i);
+        preparePopulate(l.size());
+        for(int i = 0; i<l.size(); ++i) entries[i] = l.get(i);
+        pop=Math.min(pop+l.size(), maxSize);
         return true;
     }
 
     @Override
     public boolean addAll(int index, Collection<? extends E> c) {
+        if(index>=maxSize) return false;
         if(index>=entries.length || index<0 || c.size()==0) return false;
-        ArrayList<Object> l = new ArrayList<>(c);
-        for(int i = 0; i<l.size(); ++i) if(l.get(i)==null) l.set(i, empty);
-        if(pop+l.size()>maxSize) for(int i = pop+l.size()-maxSize; i<l.size(); ++i) l.remove(l.size());
-        pop = pop==maxSize?pop:pop+l.size();
-        if(pop==entries.length) adaptLoad();
-        if(index==entries.length-1){
-            entries[index] = l.get(0);
-            return true;
-        }
-        if(l.size()+index<entries.length)
-            System.arraycopy(entries, index, entries, index+1, entries.length-(index+l.size()));
-        for(int i = index; i<Math.min(index+l.size(), entries.length); ++i) entries[i] = l.get(i);
+        ArrayList<? super E> l = c.stream().filter(e -> !contains(e)).collect(Collectors.toCollection(ArrayList::new));
+        if(index+l.size()>maxSize) for(int i = maxSize-index; i<l.size(); ++i) l.remove(i);
+        adaptLoad(l.size());
+        pop = pop+l.size() >= maxSize ? pop : pop+l.size();
+        if(l.size()+index<entries.length) System.arraycopy(entries, index, entries, l.size()+1, entries.length-l.size()-1);
+        for(int i = 0; i<l.size(); ++i) entries[i+index] = l.get(i);
+        shift();                                                                                                        // Ensure no misalignment happens
         return true;
     }
 
@@ -197,11 +196,11 @@ public class ShiftingList<E> implements List<E> {
      */
     protected void shift(){
         for(int i = 0; i<entries.length; ++i)
-            if(entries[i]==null && i!=pop-1)
+            if(entries[i]==null && i!=pop)
                 for(int j = i; j<entries.length; ++j)
                     if(entries[j]!=null){
                         entries[i] = entries[j];
-                        entries[i] = null;
+                        entries[j] = null;
                         break;
                     }else if(j+1==entries.length) return;                                                               // Found all populated entries
     }
@@ -228,7 +227,7 @@ public class ShiftingList<E> implements List<E> {
 
     @Override
     public void add(int index, E element) {
-        if(index>=entries.length || index<0) return;
+        if(index>=entries.length || index<0 || contains(element)) return;
         Object o = element==null?empty:element;
         pop = pop==maxSize?pop:pop+1;
         if(pop==entries.length) adaptLoad();
@@ -286,7 +285,7 @@ public class ShiftingList<E> implements List<E> {
         protected int counter = 0;
         private final int pop;
         private final Object[] entries;
-        public Iterator(int pop, Object[] entries){ this.pop = pop; this.entries = entries; }
+        public Iterator(int pop, Object[] entries){  this.pop = pop; this.entries = entries; }
         @Override public boolean hasNext() { return counter<pop; }
         @Override public V next() { return entries[counter++]==empty?null:(V)entries[counter-1]; }
     }
