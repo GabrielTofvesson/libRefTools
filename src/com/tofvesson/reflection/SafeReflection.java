@@ -3,9 +3,7 @@ package com.tofvesson.reflection;
 import java.lang.reflect.Constructor;
 import sun.misc.Unsafe;
 import sun.reflect.ConstructorAccessor;
-
 import java.lang.reflect.Array;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -15,6 +13,19 @@ import java.util.HashMap;
  */
 @SuppressWarnings("unused")
 public class SafeReflection {
+
+
+    private static final Unsafe unsafe;
+
+    static{
+        Unsafe u = null;
+        try{
+            Field f = Unsafe.class.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            u = (Unsafe) f.get(null);
+        }catch(Exception ignored){}                                                                                     // Exception is never thrown
+        unsafe = u;
+    }
 
     /**
      * Gets the constructor from the defined class with the specified parameters.
@@ -40,24 +51,12 @@ public class SafeReflection {
      */
     public static <T> Constructor<T> getFirstConstructor(Class<T> c){
         try {
+            @SuppressWarnings("unchecked")
             Constructor<T> c1 = (Constructor<T>) c.getDeclaredConstructors()[0];
             c1.setAccessible(true);
             return c1;
         }catch (Exception e){}
         return null;
-    }
-
-
-    private static final Unsafe unsafe;
-
-    static{
-        Unsafe u = null;
-        try{
-            Field f = Unsafe.class.getDeclaredField("theUnsafe");
-            f.setAccessible(true);
-            u = (Unsafe) f.get(null);
-        }catch(Exception ignored){}                                                                                     // Exception is never thrown
-        unsafe = u;
     }
 
     /**
