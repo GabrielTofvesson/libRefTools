@@ -24,6 +24,7 @@ class EcoAsync$1 implements Runnable{
     public void run() {
         synchronized (this) {
             try {
+                this$0.setLocal();
                 this$0.ret = val$method.invoke(val$o, val$params);
                 this$0.complete = true;
             } catch (Throwable t1) {

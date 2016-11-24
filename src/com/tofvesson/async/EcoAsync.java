@@ -142,6 +142,7 @@ public class EcoAsync<T> extends Async<T> {
 
     @Override
     public T await() {
+        checkDangerousThreadedAction();
         //noinspection StatementWithEmptyBody
         while(!failed && !complete);
         if(ret==null && t!=null){

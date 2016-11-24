@@ -1,6 +1,7 @@
 package com.tofvesson.async;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 @SuppressWarnings({"WeakerAccess", "unused", "unchecked"})
@@ -37,6 +38,7 @@ public class Async<T> {
         method.setAccessible(true); // Ensure that no crash occurs
         task = new Thread(()-> { // Create a new thread
             try {
+                new ThreadLocal<Async>().set(Async.this);
                 ret = (T) method.invoke(o, params); // Invoke given method
                 complete = true;                    // Notify all threads who are checking
             } catch (Throwable t1) {                // Prepare for failure
@@ -102,13 +104,14 @@ public class Async<T> {
     /**
      * WARNING: Package-scoped because it should only be used when overriding standard construction. Should not bw used haphazardly!
      */
-    Async() {task = null;}
+    Async() { task = null; }
 
     /**
      * Await completion of async task. Blocks thread if task isn't complete.
      * @return Return value from async method call. Return is null if {@link #cancel()} is called before this method and async task wan't finished.
      */
     public T await(){
+        checkDangerousThreadedAction();
         //noinspection StatementWithEmptyBody
         while(!failed && !complete); // Check using variables rather than checking if worker thread is alive since method calls are more computationally expensive
         if(ret==null && t!=null) throw new RuntimeException(t); // Detect a unique error state, get error and throw in caller thread
@@ -127,8 +130,31 @@ public class Async<T> {
      * @return Async owning current thread or null if thread isn't Async.
      */
     public static Async current(){
-        return new ThreadLocal<Async>().get();
+        try{
+            Object holder;
+            Field f = Thread.class.getDeclaredField("threadLocals");
+            f.setAccessible(true);
+            f = (holder=f.get(Thread.currentThread())).getClass().getDeclaredField("table");
+            f.setAccessible(true);
+            boolean containsData = false;
+            for(Object o : (Object[]) f.get(holder))
+                if(o != null) {
+                    if (!containsData) {
+                        f = o.getClass().getDeclaredField("value");
+                        f.setAccessible(true);
+                        containsData = true;
+                    }
+                    if((holder=f.get(o)) instanceof Async) return (Async) holder;
+                }
+        }catch(Exception e){}
+        return null;
     }
+
+    /**
+     * Method that must be called by the async thread of any class that
+     * extends this one if they want to support {@link #current()} for their class.
+     */
+    protected void setLocal(){ new ThreadLocal<Async>().set(this); }
 
     /**
      * Cancels async operation if it's still alive.
@@ -142,5 +168,9 @@ public class Async<T> {
                             //noinspection deprecation
             task.stop();    // Force-stop thread
         }
+    }
+
+    protected void checkDangerousThreadedAction(){
+        if(this.equals(current())) throw new RuntimeException("Calling dangerous method from inside thread is forbidden!");
     }
 }
