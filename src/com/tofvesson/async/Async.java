@@ -78,6 +78,7 @@ public class Async<T> {
     public Async(final Constructor<T> c, final Object... params){
         c.setAccessible(true);                  // Ensure that constructor can be called
         task = new Thread(() -> {               // Creates a new thread for asynchronous execution
+            new ThreadLocal<Async>().set(Async.this);
             try {
                 ret = c.newInstance(params);    // Create a new instance: invoke "<init>" method
                 complete = true;                // Notify all threads that async is finished
@@ -120,6 +121,14 @@ public class Async<T> {
      * @return True if it's still running.
      */
     public boolean isAlive(){ return task.isAlive(); } // Check if thread is still alive which directly determines if process is alive since Async is a wrapper of Thread
+
+    /**
+     * Get async instance pertaining to current thread.
+     * @return Async owning current thread or null if thread isn't Async.
+     */
+    public static Async current(){
+        return new ThreadLocal<Async>().get();
+    }
 
     /**
      * Cancels async operation if it's still alive.
