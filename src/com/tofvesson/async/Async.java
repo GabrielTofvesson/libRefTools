@@ -28,6 +28,38 @@ public class Async<T> {
     volatile Throwable t;
 
     /**
+     * Create Async object for sleeping for a while.
+     * @param millis Milliseconds to wait.
+     * @param micros Microseconds to wait.
+     */
+    private Async(long millis, int micros){
+        task = new Thread(()->{
+            new ThreadLocal<Async>().set(Async.this);
+            try {
+                Thread.sleep(millis, micros);
+                this.complete = true;
+            } catch (InterruptedException t1) {
+                if(!this.failed) {
+                    this.failed = true;
+                    this.t=t1;
+                }
+            }
+        });
+        task.setDaemon(true);
+        task.start();
+    }
+
+    /**
+     * Create Async process with runnable.
+     * @param r Runnable to execute as new task.
+     */
+    public Async(Runnable r){
+        task = new Thread(r);                       // Execute thread with runnable
+        task.setDaemon(true);                       // Ensure that process dies with program
+        task.start();                               // Start task
+    }
+
+    /**
      * Initiates an async task that invokes the defined method. If object is null, the method must be static.
      * Note that this is optimized for larger tasks id est tasks that take more than 5 milliseconds to process (preferably a minimum of 10 ms).
      * @param o Object to invoke method on.
@@ -170,7 +202,23 @@ public class Async<T> {
         }
     }
 
+    /**
+     * Checks for dangerous calls to Async methods such as awaiting oneself (which would cause a freeze in that thread).
+     */
     protected void checkDangerousThreadedAction(){
         if(this.equals(current())) throw new RuntimeException("Calling dangerous method from inside thread is forbidden!");
     }
+
+    /**
+     * Safe method for delaying the current thread.
+     * @param millis Milliseconds to delay.
+     * @param micros Microseconds to delay.
+     */
+    public static void sleep(long millis, int micros){ new Async(millis, micros).await(); }
+
+    /**
+     * Safe method for delaying the current thread.
+     * @param millis Milliseconds to delay.
+     */
+    public static void sleep(long millis){ sleep(millis, 0); }
 }
