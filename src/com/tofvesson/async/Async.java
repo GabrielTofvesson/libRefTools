@@ -54,7 +54,19 @@ public class Async<T> {
      * @param r Runnable to execute as new task.
      */
     public Async(Runnable r){
-        task = new Thread(r);                       // Execute thread with runnable
+        task = new Thread(()->{
+            try {
+                new ThreadLocal<Async>()
+                        .set(Async.this);           // Store ThreadLocal reference to Async object
+                r.run();                            // Execute runnable
+                complete = true;                    // Notify all threads who are checking
+            } catch (Throwable t1) {                // Prepare for failure
+                if(!failed) {                       // Checks if task was canceled
+                    failed = true;                  // Notifies all threads that task failed
+                    t=t1;                           // Makes error accessible to be thrown
+                }
+            }
+        });                                         // Execute thread with runnable
         task.setDaemon(true);                       // Ensure that process dies with program
         task.start();                               // Start task
     }
