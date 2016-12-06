@@ -161,6 +161,7 @@ public class ShiftingList<E> implements List<E> {
         entries = new Object[1];
     }
 
+    @Override
     public int indexOf(Object o){
         for(int i = 0; i<pop; ++i)
             if(entries[i].equals(o)) return i;
@@ -204,6 +205,10 @@ public class ShiftingList<E> implements List<E> {
                     }else if(j+1==entries.length) return;                                                               // Found all populated entries
     }
 
+    /**
+     * Prepares entry array for population of new values.
+     * @param accountFor New values to account for (in pop variable hasn't been updated).
+     */
     protected void preparePopulate(int accountFor){
         if(accountFor+pop>entries.length) adaptLoad(accountFor);                                                        // If new elements exceed limit, adapt load
         if(accountFor>entries.length) return;                                                                           // No need to delete elements if new values exceed limit
@@ -220,17 +225,17 @@ public class ShiftingList<E> implements List<E> {
     public E set(int index, E element) {
         if(index > pop) return null;
         E e = get(index);
-        entries[index] = element;
+        entries[index] = element==null?empty:element;
         return e;
     }
 
     @Override
     public void add(int index, E element) {
-        if(index>=entries.length || index<0 || contains(element)) return;
+        if(index<0 || contains(element)) return;
         Object o = element==null?empty:element;
         pop = pop==maxSize?pop:pop+1;
-        if(pop==entries.length) adaptLoad();
-        if(index==entries.length-1){
+        adaptLoad();
+        if((index>=entries.length?index=Math.min(entries.length-1, pop):index)==entries.length-1){
             entries[index] = o;
             return;
         }

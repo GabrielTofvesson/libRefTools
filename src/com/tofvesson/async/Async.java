@@ -233,4 +233,8 @@ public class Async<T> {
      * @param millis Milliseconds to delay.
      */
     public static void sleep(long millis){ sleep(millis, 0); }
+
+    public static void iSleep(long millis, int micros){ try{ Thread.sleep(millis, micros); } catch(Exception ignored) {} }
+
+    public static void iSleep(long millis){ iSleep(millis, 0); }
 }
