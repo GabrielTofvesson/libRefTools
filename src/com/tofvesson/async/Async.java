@@ -32,16 +32,18 @@ public class Async<T> {
      * @param millis Milliseconds to wait.
      * @param micros Microseconds to wait.
      */
-    private Async(long millis, int micros){
-        task = new Thread(()->{
-            new ThreadLocal<Async>().set(Async.this);
-            try {
-                Thread.sleep(millis, micros);
-                this.complete = true;
-            } catch (InterruptedException t1) {
-                if(!this.failed) {
-                    this.failed = true;
-                    this.t=t1;
+    private Async(final long millis, final int micros){
+        task = new Thread(new Runnable(){
+            public void run(){
+                new ThreadLocal<Async>().set(Async.this);
+                try {
+                    Thread.sleep(millis, micros);
+                    Async.this.complete = true;
+                } catch (InterruptedException t1) {
+                    if(!Async.this.failed) {
+                        Async.this.failed = true;
+                        Async.this.t=t1;
+                    }
                 }
             }
         });
@@ -53,17 +55,19 @@ public class Async<T> {
      * Create Async process with runnable.
      * @param r Runnable to execute as new task.
      */
-    public Async(Runnable r){
-        task = new Thread(()->{
-            try {
-                new ThreadLocal<Async>()
-                        .set(Async.this);           // Store ThreadLocal reference to Async object
-                r.run();                            // Execute runnable
-                complete = true;                    // Notify all threads who are checking
-            } catch (Throwable t1) {                // Prepare for failure
-                if(!failed) {                       // Checks if task was canceled
-                    failed = true;                  // Notifies all threads that task failed
-                    t=t1;                           // Makes error accessible to be thrown
+    public Async(final Runnable r){
+        task = new Thread(new Runnable(){
+            public void run(){
+                try {
+                    new ThreadLocal<Async>()
+                            .set(Async.this);           // Store ThreadLocal reference to Async object
+                    r.run();                            // Execute runnable
+                    complete = true;                    // Notify all threads who are checking
+                } catch (Throwable t1) {                // Prepare for failure
+                    if(!failed) {                       // Checks if task was canceled
+                        failed = true;                  // Notifies all threads that task failed
+                        t=t1;                           // Makes error accessible to be thrown
+                    }
                 }
             }
         });                                         // Execute thread with runnable
@@ -80,15 +84,17 @@ public class Async<T> {
      */
     public Async(final Object o, final Method method, final Object... params){
         method.setAccessible(true); // Ensure that no crash occurs
-        task = new Thread(()-> { // Create a new thread
-            try {
-                new ThreadLocal<Async>().set(Async.this);
-                ret = (T) method.invoke(o, params); // Invoke given method
-                complete = true;                    // Notify all threads who are checking
-            } catch (Throwable t1) {                // Prepare for failure
-                if(!failed) {                       // Checks if task was canceled
-                    failed = true;                  // Notifies all threads that task failed
-                    t=t1;                           // Makes error accessible to be thrown
+        task = new Thread(new Runnable(){ // Create a new thread
+            public void run(){
+                try {
+                    new ThreadLocal<Async>().set(Async.this);
+                    ret = (T) method.invoke(o, params); // Invoke given method
+                    complete = true;                    // Notify all threads who are checking
+                } catch (Throwable t1) {                // Prepare for failure
+                    if(!failed) {                       // Checks if task was canceled
+                        failed = true;                  // Notifies all threads that task failed
+                        t=t1;                           // Makes error accessible to be thrown
+                    }
                 }
             }
         });
@@ -123,15 +129,17 @@ public class Async<T> {
      */
     public Async(final Constructor<T> c, final Object... params){
         c.setAccessible(true);                  // Ensure that constructor can be called
-        task = new Thread(() -> {               // Creates a new thread for asynchronous execution
-            new ThreadLocal<Async>().set(Async.this);
-            try {
-                ret = c.newInstance(params);    // Create a new instance: invoke "<init>" method
-                complete = true;                // Notify all threads that async is finished
-            } catch (Throwable t1) {            // Handle crash
-                if(!failed) {                   // Ensure that crash wasn't called by cancel()
-                    failed = true;              // Notify all threads that error has been encountered
-                    t=t1;                       // Make throwable accessible to be thrown in caller thread
+        task = new Thread(new Runnable() {               // Creates a new thread for asynchronous execution
+            public void run(){
+                new ThreadLocal<Async>().set(Async.this);
+                try {
+                    ret = c.newInstance(params);    // Create a new instance: invoke "<init>" method
+                    complete = true;                // Notify all threads that async is finished
+                } catch (Throwable t1) {            // Handle crash
+                    if(!failed) {                   // Ensure that crash wasn't called by cancel()
+                        failed = true;              // Notify all threads that error has been encountered
+                        t=t1;                       // Make throwable accessible to be thrown in caller thread
+                    }
                 }
             }
         });

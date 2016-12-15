@@ -3,7 +3,6 @@ package com.tofvesson.collections;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @SuppressWarnings({"unchecked", "ReturnOfInnerClass", "unused"})
 public class ShiftingList<E> implements List<E> {
@@ -42,24 +41,20 @@ public class ShiftingList<E> implements List<E> {
         this(maxSize, 0.75);
     }
 
-    @Override
     public int size() {
         return pop;
     }
 
-    @Override
     public boolean isEmpty() {
         return pop==0;
     }
 
-    @Override
     public boolean contains(Object o) {
         if(o==empty) return false;
         for(int i = 0; i<pop; ++i) if((o!=null && o.equals(entries[i])) || (o==null && entries[i]==empty)) return true;
         return false;
     }
 
-    @Override
     public Object[] toArray() {
         Object[] o = new Object[pop];
         System.arraycopy(entries, 0, o, 0, pop);
@@ -67,13 +62,11 @@ public class ShiftingList<E> implements List<E> {
         return o;
     }
 
-    @Override
     public <T> T[] toArray(T[] a) {
         for(int i = 0; i<Math.min(pop, a.length); ++i) a[i] = (T) entries[i];
         return a;
     }
 
-    @Override
     public boolean add(E e) {
         if(contains(e)) return false;
         preparePopulate(1);
@@ -82,30 +75,27 @@ public class ShiftingList<E> implements List<E> {
         return true;
     }
 
-    @Override
     public boolean remove(Object o) {
         for(int i = 0; i<pop; ++i)
             if(entries[i]==o){
                 entries[i]=null;
-                if(pop<entries.length*load) {
-                    shift();
-                    adaptLoad(-1);
-                }
+                --pop;
+                shift();
+                if(pop<entries.length*load) adaptLoad();
                 return true;
             }
         return false;
     }
 
-    @Override
     public boolean containsAll(Collection<?> c) {
         boolean b = true;
         for(Object o : c) b &= contains(o);
         return b;
     }
 
-    @Override
     public boolean addAll(Collection<? extends E> c) {
-        ArrayList<? super E> l = c.stream().filter(e -> !contains(e)).collect(Collectors.toCollection(ArrayList::new));
+        ArrayList<? super E> l = new ArrayList<E>();
+        for(E e : c) if(!contains(e)) l.add(e);
         if(l.size()>maxSize) for(int i = maxSize; i<l.size(); ++i) l.remove(i);
         preparePopulate(l.size());
         for(int i = 0; i<l.size(); ++i) entries[i] = l.get(i);
@@ -113,11 +103,11 @@ public class ShiftingList<E> implements List<E> {
         return true;
     }
 
-    @Override
     public boolean addAll(int index, Collection<? extends E> c) {
         if(index>=maxSize) return false;
         if(index>=entries.length || index<0 || c.size()==0) return false;
-        ArrayList<? super E> l = c.stream().filter(e -> !contains(e)).collect(Collectors.toCollection(ArrayList::new));
+        ArrayList<? super E> l = new ArrayList<E>();
+        for(E e : c) if(!contains(e)) l.add(e);
         if(index+l.size()>maxSize) for(int i = maxSize-index; i<l.size(); ++i) l.remove(i);
         adaptLoad(l.size());
         pop = pop+l.size() >= maxSize ? pop : pop+l.size();
@@ -127,7 +117,6 @@ public class ShiftingList<E> implements List<E> {
         return true;
     }
 
-    @Override
     public boolean retainAll(Collection<?> c) {
         int removed = 0;
         for(int i = 0; i<pop; ++i)
@@ -141,7 +130,6 @@ public class ShiftingList<E> implements List<E> {
         return true;
     }
 
-    @Override
     public boolean removeAll(Collection<?> c) {
         int removed = 0;
         for(int i = 0; i<pop; ++i)
@@ -155,13 +143,11 @@ public class ShiftingList<E> implements List<E> {
         return true;
     }
 
-    @Override
     public void clear() {
         pop = 0;
         entries = new Object[1];
     }
 
-    @Override
     public int indexOf(Object o){
         for(int i = 0; i<pop; ++i)
             if(entries[i].equals(o)) return i;
@@ -215,13 +201,11 @@ public class ShiftingList<E> implements List<E> {
         System.arraycopy(entries, 0, entries, accountFor, entries.length-accountFor);                                   // Shift array elements to account for new elements
     }
 
-    @Override
     public E get(int i){
         if(i>pop) return null;
         return entries[i]==empty?null:(E)entries[i];
     }
 
-    @Override
     public E set(int index, E element) {
         if(index > pop) return null;
         E e = get(index);
@@ -229,7 +213,6 @@ public class ShiftingList<E> implements List<E> {
         return e;
     }
 
-    @Override
     public void add(int index, E element) {
         if(index<0 || contains(element)) return;
         Object o = element==null?empty:element;
@@ -243,7 +226,6 @@ public class ShiftingList<E> implements List<E> {
         entries[index] = o;
     }
 
-    @Override
     public E remove(int index) {
         if(index>pop || index<0) return null;
         E e = entries[index]==empty?null:(E)entries[index];
@@ -253,7 +235,6 @@ public class ShiftingList<E> implements List<E> {
         return e;
     }
 
-    @Override
     public int lastIndexOf(Object o) {
         for(int i = pop; i>0; --i)
             if(o.equals(entries[i]))
@@ -261,22 +242,18 @@ public class ShiftingList<E> implements List<E> {
         return -1;
     }
 
-    @Override
-    public Iterator<E> iterator(){ return new Iterator<>(pop, entries); }
+    public Iterator<E> iterator(){ return new Iterator<E>(this); }
 
-    @Override
-    public ListIterator<E> listIterator(){ return new ListIterator<>(this); }
+    public ListIterator<E> listIterator(){ return new ListIterator<E>(this); }
 
-    @Override
     public ListIterator<E> listIterator(int index) {
         if(index<0) throw new RuntimeException("Invalid starting point for iterator defined: "+index);
-        return new ListIterator<>(this, index);
+        return new ListIterator<E>(this, index);
     }
 
-    @Override
     public List<E> subList(int fromIndex, int toIndex) {
-        if(fromIndex<0 || fromIndex>=toIndex || fromIndex>pop || toIndex>pop) return new ArrayList<>();
-        ShiftingList<E> l = new ShiftingList<>(maxSize);
+        if(fromIndex<0 || fromIndex>=toIndex || fromIndex>pop || toIndex>pop) return new ArrayList<E>();
+        ShiftingList<E> l = new ShiftingList<E>(maxSize);
         for(int i = toIndex-1; i>fromIndex; --i) l.add(entries[i]==empty?null:(E)entries[i]);
         return l;
     }
@@ -287,11 +264,16 @@ public class ShiftingList<E> implements List<E> {
      */
     public static class Iterator<V> implements java.util.Iterator<V>{
         protected int counter = 0;
-        private final int pop;
-        private final Object[] entries;
-        public Iterator(int pop, Object[] entries){  this.pop = pop; this.entries = entries; }
-        @Override public boolean hasNext() { return counter<pop; }
-        @Override public V next() { return entries[counter++]==empty?null:(V)entries[counter-1]; }
+        private final ShiftingList ref;
+        private Object previous;
+        public Iterator(ShiftingList ref){ this.ref = ref; }
+        public boolean hasNext() { return counter<ref.pop; }
+        public V next() {
+            return (V)(previous=ref.entries[counter++]==empty?
+                    null:
+                    ref.entries[counter-1]);
+        }
+        public void remove(){ if(counter!=0){ ref.remove(previous); --counter; } }
     }
 
     /**
@@ -307,14 +289,14 @@ public class ShiftingList<E> implements List<E> {
         private final ShiftingList list;
         public ListIterator(ShiftingList list){ this.pop = list.pop; this.entries = list.entries; this.list = list;}
         public ListIterator(ShiftingList list, int start){ this(list); counter = start; }
-        @Override public boolean hasNext() { return counter<pop; }
-        @Override public V next() { opNxt = true; return (V)(pEl=entries[counter++]==empty?null:entries[counter-1]); }
-        @Override public boolean hasPrevious() { return counter>0&&pop!=0; }
-        @Override public V previous() { opNxt = false; return (V)(pEl=entries[--counter]==empty?null:entries[counter]); }
-        @Override public int nextIndex() { return counter+1<pop?counter+1:pop; }
-        @Override public int previousIndex() { return counter!=0?counter-1:0; }
-        @Override public void remove() { list.remove(counter-(opNxt?0:1)); }
-        @Override public void set(V v) { if(pEl==entries[counter-(opNxt?0:1)]) entries[counter-(opNxt?0:1)] = v==null?empty:v; }
-        @Override public void add(V v) { list.add(counter, v); }
+        public boolean hasNext() { return counter<pop; }
+        public V next() { opNxt = true; return (V)(pEl=entries[counter++]==empty?null:entries[counter-1]); }
+        public boolean hasPrevious() { return counter>0&&pop!=0; }
+        public V previous() { opNxt = false; return (V)(pEl=entries[--counter]==empty?null:entries[counter]); }
+        public int nextIndex() { return counter+1<pop?counter+1:pop; }
+        public int previousIndex() { return counter!=0?counter-1:0; }
+        public void remove() { list.remove(counter-(opNxt?0:1)); }
+        public void set(V v) { if(pEl==entries[counter-(opNxt?0:1)]) entries[counter-(opNxt?0:1)] = v==null?empty:v; }
+        public void add(V v) { list.add(counter, v); }
     }
 }

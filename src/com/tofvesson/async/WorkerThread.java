@@ -1,12 +1,11 @@
 package com.tofvesson.async;
 
 import javafx.util.Pair;
+
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * A thread tasked with accepting multiple instructions. This is useful for people who don't want to constantly create new threads for heavy work.
@@ -14,9 +13,9 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class WorkerThread extends Thread {
 
-    List<Long> ids = new ArrayList<>();
+    List<Long> ids = new ArrayList<Long>();
     volatile Queue<Pair<Long, Pair<Method, Pair<Object, Object>>>> queue;
-    volatile Map<Long, Object> output = new HashMap<>();
+    volatile Map<Long, Object> output = new HashMap<Long, Object>();
     volatile boolean alive=true, completed=false;
 
     /**
@@ -28,25 +27,27 @@ public class WorkerThread extends Thread {
         try{
             Field f = Thread.class.getDeclaredField("target");
             f.setAccessible(true);
-            f.set(this, (Runnable) ()->
+            f.set(this, new Runnable()
             {
-                synchronized (Thread.currentThread()) {
-                    while (alive) {
-                        if (queue.size() != 0) {
-                            Pair<Long, Pair<Method, Pair<Object, Object>>> q = queue.poll();
-                            Pair<Method, Pair<Object, Object>> instr = q.getValue();
-                            try {
-                                output.put(q.getKey(), instr.getKey().invoke(instr.getValue().getKey(), (Object[]) instr.getValue().getValue()));
-                                completed = true;
-                            } catch (IllegalAccessException | InvocationTargetException e) {
-                                e.printStackTrace();
+                public void run(){
+                    synchronized (Thread.currentThread()) {
+                        while (alive) {
+                            if (queue.size() != 0) {
+                                Pair<Long, Pair<Method, Pair<Object, Object>>> q = queue.poll();
+                                Pair<Method, Pair<Object, Object>> instr = q.getValue();
+                                try {
+                                    output.put(q.getKey(), instr.getKey().invoke(instr.getValue().getKey(), (Object[]) instr.getValue().getValue()));
+                                    completed = true;
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                }
                             }
                         }
                     }
                 }
             });
         }catch(Exception e){}
-        queue = new ArrayBlockingQueue<>(queueSize);
+        queue = new ArrayBlockingQueue<Pair<Long, Pair<Method, Pair<Object, Object>>>>(queueSize);
     }
 
     /**
@@ -59,8 +60,9 @@ public class WorkerThread extends Thread {
     public long push(Object invokeOn, Method m, Object... params){
         m.setAccessible(true);
         long id;
-        do{ id = ThreadLocalRandom.current().nextLong(); }while(ids.contains(id));
-        queue.add(new Pair<>(id, new Pair<>(m, new Pair<>(invokeOn, params))));
+        Random r = new Random();
+        do{ id = r.nextLong(); }while(ids.contains(id));
+        queue.add(new Pair<Long, Pair<Method, Pair<Object, Object>>>(id, new Pair<Method, Pair<Object, Object>>(m, new Pair<Object, Object>(invokeOn, params))));
         ids.add(id);
         return id;
     }

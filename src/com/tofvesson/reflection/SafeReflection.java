@@ -1,9 +1,10 @@
 package com.tofvesson.reflection;
 
-import java.lang.reflect.Constructor;
 import sun.misc.Unsafe;
 import sun.reflect.ConstructorAccessor;
+
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -281,7 +282,7 @@ public class SafeReflection {
      * A definition for custom enum creation.
      */
     public static class EnumDefinition {
-        HashMap<Object, Class> params = new HashMap<>(); // Assign a specific type to each parameter
+        HashMap<Object, Class> params = new HashMap<Object, Class>(); // Assign a specific type to each parameter
 
         /**
          * Put an object in the parameter list.

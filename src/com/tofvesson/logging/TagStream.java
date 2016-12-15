@@ -9,7 +9,7 @@ import java.util.List;
 public class TagStream extends PrintStream {
 
     private final OutputStream node;
-    private List<Tag> tags = new ArrayList<>();
+    private List<Tag> tags = new ArrayList<Tag>();
 
     public TagStream(PrintStream node){
         super(node);
