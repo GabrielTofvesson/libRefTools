@@ -7,7 +7,10 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 
 /**
  * Safe tools to help simplify code when dealing with reflection.
@@ -387,6 +390,24 @@ public class SafeReflection {
             try { return putPrimitive(d); } catch (NotAutoBoxedException e) { }
             return this;
         }
+    }
+
+    public static Class<?> getCallerClass(){
+        ArrayList<StackTraceElement> s = new ArrayList<StackTraceElement>();
+        StackTraceElement[] s1 = new Exception().getStackTrace();
+        Collections.addAll(s, s1);
+        s.remove(0);
+        Iterator<StackTraceElement> i = s.iterator();
+        String s2;
+        while(i.hasNext()){
+            if((s2=i.next().toString()).contains("java.lang.reflect.Method.invoke")
+                    || s2.contains("sun.reflect.NativeMethodAccessorImpl.invoke")
+                    || s2.contains("sun.reflect.DelegatingMethodAccessorImpl.invoke"))
+                i.remove();
+        }
+        try { return Class.forName(s.get(s.size()==1?0:1).getClassName()); } catch (ClassNotFoundException e) { }
+        assert false:"Unreachable code reached";
+        return null;
     }
 
 }

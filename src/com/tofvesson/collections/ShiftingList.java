@@ -268,11 +268,7 @@ public class ShiftingList<E> implements List<E> {
         private Object previous;
         public Iterator(ShiftingList ref){ this.ref = ref; }
         public boolean hasNext() { return counter<ref.pop; }
-        public V next() {
-            return (V)(previous=ref.entries[counter++]==empty?
-                    null:
-                    ref.entries[counter-1]);
-        }
+        public V next() { return (V)(previous=ref.entries[counter++]==empty?null:ref.entries[counter-1]); }
         public void remove(){ if(counter!=0){ ref.remove(previous); --counter; } }
     }
 
