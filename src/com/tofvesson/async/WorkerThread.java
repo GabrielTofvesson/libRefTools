@@ -1,6 +1,6 @@
 package com.tofvesson.async;
 
-import javafx.util.Pair;
+import com.tofvesson.collections.Pair;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
