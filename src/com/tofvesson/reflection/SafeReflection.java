@@ -1,12 +1,8 @@
 package com.tofvesson.reflection;
 
 import sun.misc.Unsafe;
-import sun.reflect.ConstructorAccessor;
 
-import java.lang.reflect.Array;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -20,15 +16,38 @@ public class SafeReflection {
 
 
     private static final Unsafe unsafe;
+    private static final Method newInstance, aConAccess, gFieldAccess, fieldAccess;
+    private static final Field ro;
+    private static final long override;
 
     static{
         Unsafe u = null;
+        Method m = null, m1 = null, m2 = null, m3 = null;
+        Field f = null;
+        long l = 0;
         try{
-            Field f = Unsafe.class.getDeclaredField("theUnsafe");
+            Class<?> c;
+            f = Unsafe.class.getDeclaredField("theUnsafe");
             f.setAccessible(true);
             u = (Unsafe) f.get(null);
-        }catch(Exception ignored){}                                                                                     // Exception is never thrown
+            m = Class.forName("jdk.internal.reflect.ConstructorAccessor").getDeclaredMethod("newInstance", Object[].class);
+            u.putBoolean(m, l=u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override")), true);
+            m1 = Constructor.class.getDeclaredMethod("acquireConstructorAccessor");
+            m1.setAccessible(true);
+            m2 = Field.class.getDeclaredMethod("getFieldAccessor", Object.class);
+            m2.setAccessible(true);
+            m3 = (c=Class.forName("jdk.internal.reflect.UnsafeQualifiedStaticObjectFieldAccessorImpl")).getDeclaredMethod("set", Object.class, Object.class);
+            u.putBoolean(m3, l, true);
+            f = c.getSuperclass().getDeclaredField("isReadOnly");
+            u.putBoolean(f, l, true);
+        }catch(Exception ignored){ ignored.printStackTrace(); }                                                                                     // Exception is never thrown
         unsafe = u;
+        newInstance = m;
+        aConAccess = m1;
+        gFieldAccess = m2;
+        fieldAccess = m3;
+        ro = f;
+        override = l;
     }
 
     /**
@@ -41,7 +60,7 @@ public class SafeReflection {
     public static <T> Constructor<T> getConstructor(Class<T> c, Class<?>... params){
         try{
             Constructor<T> c1 = c.getConstructor(params);
-            c1.setAccessible(true);
+            unsafe.putBoolean(c1, override, true);
             return c1;
         }catch(Exception e){}
         return null;
@@ -57,7 +76,7 @@ public class SafeReflection {
         try {
             @SuppressWarnings("unchecked")
             Constructor<T> c1 = (Constructor<T>) c.getDeclaredConstructors()[0];
-            c1.setAccessible(true);
+            unsafe.putBoolean(c1, override, true);
             return c1;
         }catch (Exception e){}
         return null;
@@ -74,7 +93,7 @@ public class SafeReflection {
     public static Method getMethod(Class<?> c, String name, Class<?>... params){
         try{
             Method m = c.getDeclaredMethod(name, params);
-            m.setAccessible(true);
+            unsafe.putBoolean(m, override, true);
             return m;
         }catch(Exception e){}
         return null;
@@ -99,7 +118,7 @@ public class SafeReflection {
      * @return Return value of method or null if method is null.
      */
     public static Object invokeMethod(Object inst, Method m, Object... params){
-        if(m!=null) m.setAccessible(true);
+        if(m!=null) unsafe.putBoolean(m, override, true);
         try{ return m!=null?m.invoke(inst, params):null; }catch(Exception e){}
         return null;
     }
@@ -115,7 +134,7 @@ public class SafeReflection {
     public static Method getFirstMethod(Class<?> c, String name){
         try{
             Method[] m = c.getDeclaredMethods();
-            for (Method aM : m) if(aM.getName().equals(name)){ aM.setAccessible(true); return aM;}
+            for (Method aM : m) if(aM.getName().equals(name)){ unsafe.putBoolean(aM, override, true); return aM;}
         }catch(Exception e){}
         return null;
     }
@@ -129,7 +148,7 @@ public class SafeReflection {
     public static Field getField(Class<?> c, String name){
         try{
             Field f = c.getDeclaredField(name);
-            f.setAccessible(true);
+            unsafe.putBoolean(f, override, true);
             return f;
         }catch(Exception e){}
         return null;
@@ -167,7 +186,7 @@ public class SafeReflection {
     public static Object getEnclosingClassObjectRef(Object nested){
         try{
             Field f = nested.getClass().getDeclaredField("this$0");
-            f.setAccessible(true);
+            unsafe.putBoolean(f, override, true);
             return f.get(nested);
         }catch(Exception e){}
         return null;
@@ -200,7 +219,7 @@ public class SafeReflection {
         try {
             // Get a reference to the static method values() and get values
             Method v = clazz.getDeclaredMethod("values");
-            v.setAccessible(true);
+            unsafe.putBoolean(v, override, true);
             T[] values = (T[]) v.invoke(null);
 
             // Return object if it already exists
@@ -215,12 +234,10 @@ public class SafeReflection {
 
             // Get enum constructor (inherited from Enum.class)
             Constructor c = clazz.getDeclaredConstructor(paramList);
-            c.setAccessible(true);
-            Method m = Constructor.class.getDeclaredMethod("acquireConstructorAccessor");
-            m.setAccessible(true);
+            unsafe.putBoolean(c, override, true);
 
             // Get constructor accessor since Constructor.newInstance throws an exception because Enums are "immutable"
-            ConstructorAccessor access = (ConstructorAccessor) m.invoke(c);
+            Object access = aConAccess.invoke(c);
 
             Object[] parameters = new Object[def.params.size()+2];
             parameters[0] = name;
@@ -229,7 +246,7 @@ public class SafeReflection {
             for(Object o : def.params.keySet()) parameters[--iterator] = o;
 
             // Create new instance of enum with valid name and ordinal
-            u = (T) access.newInstance(parameters);
+            u = (T) newInstance.invoke(access, (Object) parameters);
 
             // Get the final name field from Enum.class and make it temporarily modifiable
             Field f = Enum.class.getDeclaredField("name");
@@ -249,22 +266,17 @@ public class SafeReflection {
 
             // Start doing magic by getting an instance of sun.reflect.UnsafeQualifiedStaticObjectFieldAccessorImpl.class
             // Class is package-local so we can't reference it by anything other than Object
-            m = Field.class.getDeclaredMethod("getFieldAccessor", Object.class);
-            m.setAccessible(true);
-            Object UQSOFAImpl = m.invoke(f, u);
+            Object UQSOFAImpl = gFieldAccess.invoke(f, u);
 
             // Get "isReadOnly" flag ($VALUES is always read-only even if Field.setAccessible(true) is called)
             // Flag is located in superclass (sun.reflect.UnsafeQualifiedStaticFieldAccessorImpl.class (also fucking package-local))
             // Set flag to 'false' to allow for modification against Java's will
-            Field f1 = UQSOFAImpl.getClass().getSuperclass().getDeclaredField("isReadOnly");
-            f1.setAccessible(true);
-            f1.setBoolean(UQSOFAImpl, false);
+            ro.setBoolean(UQSOFAImpl, false);
 
             // Invoke set() method on UnsafeQualifiedStaticObjectFieldAccessorImpl object which sets the
             // private field $VALUES to our new array
-            m = UQSOFAImpl.getClass().getDeclaredMethod("set", Object.class, Object.class);
-            m.setAccessible(true);
-            m.invoke(UQSOFAImpl, f, $VALUES);
+            System.out.println(UQSOFAImpl.getClass());
+            fieldAccess.invoke(UQSOFAImpl, f, $VALUES);
         } catch (Exception wrongParams) { throw new RuntimeException(wrongParams); }
         return u;
     }
@@ -284,8 +296,11 @@ public class SafeReflection {
     /**
      * A definition for custom enum creation.
      */
-    public static class EnumDefinition {
+    public static final class EnumDefinition {
         HashMap<Object, Class> params = new HashMap<Object, Class>(); // Assign a specific type to each parameter
+
+        public EnumDefinition(){}
+        public EnumDefinition(Object... params){ for(Object o : params) putObject(o); }
 
         /**
          * Put an object in the parameter list.
