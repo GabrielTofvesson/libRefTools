@@ -12,12 +12,13 @@ import java.util.Iterator;
  * Safe tools to help simplify code when dealing with reflection.
  */
 @SuppressWarnings("ALL")
-public class SafeReflection {
+public final class SafeReflection {
 
 
     private static final Unsafe unsafe;
     private static final Method newInstance, aConAccess, gFieldAccess, fieldAccess;
     private static final Field ro;
+    private static final String version;
     private static final long override;
 
     static{
@@ -25,25 +26,25 @@ public class SafeReflection {
         Method m = null, m1 = null, m2 = null, m3 = null;
         Field f = null;
         long l = 0;
-        String version = "sun.reflect";
+        String ver = "sun.reflect";
         //Get package based on java version (Java 9+ use "jdk.internal.reflect" while "sun.reflect" is used by earlier versions)
         try{
             Class.forName("sun.reflect.DelegatingConstructorAccessorImpl");
         }catch(Throwable ignored){
-            version="jdk.internal.reflect";
+            ver="jdk.internal.reflect"; // If class can't be found in sun.reflect; we know that user is running Java 9+
         }
         try{
             Class<?> c;
             f = Unsafe.class.getDeclaredField("theUnsafe");
             f.setAccessible(true);
             u = (Unsafe) f.get(null);
-            m = Class.forName(version+".DelegatingConstructorAccessorImpl").getDeclaredMethod("newInstance", Object[].class);
+            m = Class.forName(ver+".DelegatingConstructorAccessorImpl").getDeclaredMethod("newInstance", Object[].class);
             u.putBoolean(m, l=u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override")), true);
             m1 = Constructor.class.getDeclaredMethod("acquireConstructorAccessor");
             m1.setAccessible(true);
             m2 = Field.class.getDeclaredMethod("getFieldAccessor", Object.class);
             m2.setAccessible(true);
-            m3 = (c=Class.forName(version+".UnsafeQualifiedStaticObjectFieldAccessorImpl")).getDeclaredMethod("set", Object.class, Object.class);
+            m3 = (c=Class.forName(ver+".UnsafeQualifiedStaticObjectFieldAccessorImpl")).getDeclaredMethod("set", Object.class, Object.class);
             u.putBoolean(m3, l, true);
             f = c.getSuperclass().getDeclaredField("isReadOnly");
             u.putBoolean(f, l, true);
@@ -55,6 +56,7 @@ public class SafeReflection {
         fieldAccess = m3;
         ro = f;
         override = l;
+        version = ver;
     }
 
     /**
@@ -423,8 +425,8 @@ public class SafeReflection {
         String s2;
         while(i.hasNext()){
             if((s2=i.next().toString()).contains("java.lang.reflect.Method.invoke")
-                    || s2.contains("sun.reflect.NativeMethodAccessorImpl.invoke")
-                    || s2.contains("sun.reflect.DelegatingMethodAccessorImpl.invoke"))
+                    || s2.contains(version+".NativeMethodAccessorImpl.invoke")
+                    || s2.contains(version+".DelegatingMethodAccessorImpl.invoke"))
                 i.remove();
         }
         try { return Class.forName(s.get(s.size()==1?0:1).getClassName()); } catch (ClassNotFoundException e) { }

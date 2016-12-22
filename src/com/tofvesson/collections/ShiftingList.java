@@ -3,6 +3,7 @@ package com.tofvesson.collections;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import static com.tofvesson.collections.Empty.empty;
 
 @SuppressWarnings({"unchecked", "ReturnOfInnerClass", "unused"})
 public class ShiftingList<E> implements List<E> {
@@ -19,26 +20,21 @@ public class ShiftingList<E> implements List<E> {
     /**
      * Maximum size of set.
      */
-    final int maxSize;
+    public final int maxSize;
 
     /**
      * Load factor used when calculating how to resize array.
      */
-    double load;
+    protected final float load;
 
-    /**
-     * Internal reference to reserved, unpopulated entries.
-     */
-    static final Empty empty = new Empty();
-
-    public ShiftingList(int maxSize, double load){
+    public ShiftingList(int maxSize, float load){
         this.maxSize = maxSize<1?20:maxSize;
-        this.load = load>0.99||load<0.1?0.75:load;
+        this.load = load>0.99||load<0.1?0.75f:load;
         entries = new Object[1];
     }
 
     public ShiftingList(int maxSize){
-        this(maxSize, 0.75);
+        this(maxSize, 0.75f);
     }
 
     public int size() {
@@ -173,7 +169,7 @@ public class ShiftingList<E> implements List<E> {
             return;
         }
         Object[] o = new Object[(int) Math.max(1, Math.min((pop+accountFor)/load, maxSize))];                           // Load adaptation algorithm capping at maxSize or 0
-        System.arraycopy(entries, 0, o, 0, Math.min(o.length, entries.length));                                         // Move as many entries as possible
+        System.arraycopy(entries, 0, o, 0, Math.min(o.length, entries.length));                          // Move as many entries as possible
         entries = o;
     }
 
@@ -198,7 +194,7 @@ public class ShiftingList<E> implements List<E> {
     protected void preparePopulate(int accountFor){
         if(accountFor+pop>entries.length) adaptLoad(accountFor);                                                        // If new elements exceed limit, adapt load
         if(accountFor>entries.length) return;                                                                           // No need to delete elements if new values exceed limit
-        System.arraycopy(entries, 0, entries, accountFor, entries.length-accountFor);                                   // Shift array elements to account for new elements
+        System.arraycopy(entries, 0, entries, accountFor, entries.length-accountFor);                     // Shift array elements to account for new elements
     }
 
     public E get(int i){
