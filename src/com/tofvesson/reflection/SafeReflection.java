@@ -3,60 +3,54 @@ package com.tofvesson.reflection;
 import sun.misc.Unsafe;
 
 import java.lang.reflect.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
+import java.util.*;
 
 /**
  * Safe tools to help simplify code when dealing with reflection.
  */
-@SuppressWarnings("ALL")
 public final class SafeReflection {
 
 
     private static final Unsafe unsafe;
-    private static final Method newInstance, aConAccess, gFieldAccess, fieldAccess;
-    private static final Field ro;
+    private static final Method newInstance, aConAccess;
     private static final String version;
     private static final long override;
+    private static final boolean hasAConAccess;
 
     static{
         Unsafe u = null;
-        Method m = null, m1 = null, m2 = null, m3 = null;
-        Field f = null;
+        Method m = null, m1 = null;
+        Field f;
         long l = 0;
-        String ver = "sun.reflect";
+        String ver = "";
+        boolean b = true;
         //Get package based on java version (Java 9+ use "jdk.internal.reflect" while "sun.reflect" is used by earlier versions)
         try{
-            Class.forName("sun.reflect.DelegatingConstructorAccessorImpl");
+            ClassLoader.getSystemClassLoader().loadClass("jdk.internal.reflect.DelegatingConstructorAccessorImpl");
         }catch(Throwable ignored){
-            ver="jdk.internal.reflect"; // If class can't be found in sun.reflect; we know that user is running Java 9+
+            ver="sun.reflect"; // If class can't be found in sun.reflect; we know that user is running Java 9+
         }
         try{
-            Class<?> c;
             f = Unsafe.class.getDeclaredField("theUnsafe");
             f.setAccessible(true);
             u = (Unsafe) f.get(null);
-            m = Class.forName(ver+".DelegatingConstructorAccessorImpl").getDeclaredMethod("newInstance", Object[].class);
-            u.putBoolean(m, l=u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override")), true);
-            m1 = Constructor.class.getDeclaredMethod("acquireConstructorAccessor");
-            m1.setAccessible(true);
-            m2 = Field.class.getDeclaredMethod("getFieldAccessor", Object.class);
-            m2.setAccessible(true);
-            m3 = (c=Class.forName(ver+".UnsafeQualifiedStaticObjectFieldAccessorImpl")).getDeclaredMethod("set", Object.class, Object.class);
-            u.putBoolean(m3, l, true);
-            f = c.getSuperclass().getDeclaredField("isReadOnly");
+            l=u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override"));
+            try {
+                m1 = Constructor.class.getDeclaredMethod("acquireConstructorAccessor");
+                m1.setAccessible(true);
+                m = Class.forName(ver + ".DelegatingConstructorAccessorImpl").getDeclaredMethod("newInstance", Object[].class);
+                u.putBoolean(m, l, true);
+            }catch(Exception e){
+                b = false;
+            }
             u.putBoolean(f, l, true);
         }catch(Exception ignored){ ignored.printStackTrace(); }                                                                                     // Exception is never thrown
         unsafe = u;
         newInstance = m;
         aConAccess = m1;
-        gFieldAccess = m2;
-        fieldAccess = m3;
-        ro = f;
         override = l;
         version = ver;
+        hasAConAccess = b;
     }
 
     /**
@@ -239,14 +233,12 @@ public final class SafeReflection {
             paramList[0] = String.class; // Name
             paramList[1] = int.class; // Ordinal
             int iterator = paramList.length;
-            for(Class c : def.params.values()) paramList[--iterator] = c; // Shit's fucking reversed
+            for(Class c : def.params.values()) paramList[--iterator] = c; // The stuff is reversed
 
             // Get enum constructor (inherited from Enum.class)
-            Constructor c = clazz.getDeclaredConstructor(paramList);
-            unsafe.putBoolean(c, override, true);
-
-            // Get constructor accessor since Constructor.newInstance throws an exception because Enums are "immutable"
-            Object access = aConAccess.invoke(c);
+            Constructor<T> c = clazz.getDeclaredConstructor(paramList);
+            if(hasAConAccess) unsafe.putBoolean(c, override, true);
+            else c.setAccessible(true);
 
             Object[] parameters = new Object[def.params.size()+2];
             parameters[0] = name;
@@ -255,7 +247,8 @@ public final class SafeReflection {
             for(Object o : def.params.keySet()) parameters[--iterator] = o;
 
             // Create new instance of enum with valid name and ordinal
-            u = (T) newInstance.invoke(access, (Object) parameters);
+            if(hasAConAccess) u = (T) newInstance.invoke(aConAccess.invoke(c), (Object) parameters);
+            else u = c.newInstance(parameters);
 
             // Get the final name field from Enum.class and make it temporarily modifiable
             Field f = Enum.class.getDeclaredField("name");
@@ -266,26 +259,14 @@ public final class SafeReflection {
 
             if(!addToValuesArray) return u; // Stops here if
 
-            // Get the current values field from Enum (a bitch to modify)
+            // Get the current values field from Enum (a female dog to modify)
             f = clazz.getDeclaredField("$VALUES");
             f.setAccessible(true);
             T[] $VALUES = (T[]) Array.newInstance(clazz, values.length+1);
             System.arraycopy(values, 0, $VALUES, 0, values.length); // Copy over values from old array
             $VALUES[values.length] = u; // Add out custom enum to our local array
 
-            // Start doing magic by getting an instance of sun.reflect.UnsafeQualifiedStaticObjectFieldAccessorImpl.class
-            // Class is package-local so we can't reference it by anything other than Object
-            Object UQSOFAImpl = gFieldAccess.invoke(f, u);
-
-            // Get "isReadOnly" flag ($VALUES is always read-only even if Field.setAccessible(true) is called)
-            // Flag is located in superclass (sun.reflect.UnsafeQualifiedStaticFieldAccessorImpl.class (also fucking package-local))
-            // Set flag to 'false' to allow for modification against Java's will
-            ro.setBoolean(UQSOFAImpl, false);
-
-            // Invoke set() method on UnsafeQualifiedStaticObjectFieldAccessorImpl object which sets the
-            // private field $VALUES to our new array
-            System.out.println(UQSOFAImpl.getClass());
-            fieldAccess.invoke(UQSOFAImpl, f, $VALUES);
+            unsafe.putObject(clazz, unsafe.staticFieldOffset(f), $VALUES);
         } catch (Exception wrongParams) { throw new RuntimeException(wrongParams); }
         return u;
     }

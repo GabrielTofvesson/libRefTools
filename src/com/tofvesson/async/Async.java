@@ -1,8 +1,6 @@
 package com.tofvesson.async;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 
 @SuppressWarnings({"WeakerAccess", "unused", "unchecked"})
 public class Async<T> {
@@ -16,6 +14,11 @@ public class Async<T> {
      * Return value/ constructed object.
      */
     volatile T ret;
+
+    /**
+     * Whether or not a posted value can be overwritten.
+     */
+    volatile boolean ovw = true;
 
     /**
      * Status indicators.
@@ -88,7 +91,8 @@ public class Async<T> {
             public void run(){
                 try {
                     new ThreadLocal<Async>().set(Async.this);
-                    ret = (T) method.invoke(o, params); // Invoke given method
+                    T ret = (T)method.invoke(o, params);// Invoke given method
+                    if(ovw) Async.this.ret = ret;       // Checks if a sticky value already has been posted
                     complete = true;                    // Notify all threads who are checking
                 } catch (Throwable t1) {                // Prepare for failure
                     if(!failed) {                       // Checks if task was canceled
@@ -133,7 +137,8 @@ public class Async<T> {
             public void run(){
                 new ThreadLocal<Async>().set(Async.this);
                 try {
-                    ret = c.newInstance(params);    // Create a new instance: invoke "<init>" method
+                    T ret = c.newInstance(params);  // Create a new instance: invoke "<init>" method
+                    if(ovw) Async.this.ret = ret;   // Checks if a sticky value already has been posted
                     complete = true;                // Notify all threads that async is finished
                 } catch (Throwable t1) {            // Handle crash
                     if(!failed) {                   // Ensure that crash wasn't called by cancel()
@@ -177,11 +182,12 @@ public class Async<T> {
      */
     public boolean isAlive(){ return task.isAlive(); } // Check if thread is still alive which directly determines if process is alive since Async is a wrapper of Thread
 
+
     /**
      * Get async instance pertaining to current thread.
      * @return Async owning current thread or null if thread isn't Async.
      */
-    public static Async current(){
+    public static <T> Async<T> current(){
         try{
             Object holder;
             Field f = Thread.class.getDeclaredField("threadLocals");
@@ -196,7 +202,7 @@ public class Async<T> {
                         f.setAccessible(true);
                         containsData = true;
                     }
-                    if((holder=f.get(o)) instanceof Async) return (Async) holder;
+                    if((holder=f.get(o)) instanceof Async) return (Async<T>) holder;
                 }
         }catch(Exception e){}
         return null;
@@ -220,6 +226,34 @@ public class Async<T> {
                             //noinspection deprecation
             task.stop();    // Force-stop thread
         }
+    }
+
+    /**
+     * Post a return value to Async object.
+     * Meant to be used from inside an instance of Async as a way to prematurely provide a return value without stopping said async process.
+     * Posting a value does not inform the Async object that it has completed operations.
+     * @param value Value to post.
+     * @param allowOverwrite If the return type of the async process should be overwritten when said process is completed. Calling postReturn overrides this.
+     */
+    public void postReturn(T value, boolean allowOverwrite){
+        ret = value;
+        ovw = allowOverwrite;
+    }
+
+    /**
+     * Post a return value to Async object.
+     * Meant to be used from inside an instance of Async as a way to prematurely provide a return value without stopping said async process.
+     * Posting a value does not inform the Async object that it has completed operations.
+     * @param value Value to post.
+     */
+    public void postReturn(T value){ postReturn(value, false); }
+
+    /**
+     * Get return type posted by object.
+     * Meant to be used after a value has been posted, not when it has been returned.
+     */
+    public T getReturn(){
+        return ret;
     }
 
     /**
