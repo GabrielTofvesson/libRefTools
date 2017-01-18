@@ -127,6 +127,26 @@ public final class SafeReflection {
     }
 
     /**
+     * Finds first available class with name given by array elements. (Useful when dealing with backward-compatibility and cross-version support).
+     * @param possibleNames Classes to look for (fully qualified class names).
+     * @return First existing class or null if no class was found.
+     */
+    public static Class<?> forNames(String... possibleNames){
+        for(String s : possibleNames) try{ return Class.forName(s); }catch(Exception e){}
+        return null;
+    }
+
+    /**
+     * Gets the first existing instance of a class with a given fully qualified name.
+     * @param possibleNames Names to search through.
+     * @return Position in the array referring to the first existing class.
+     */
+    public static int forNamesPos(String... possibleNames){
+        for(int i = 0; i<possibleNames.length; ++i) try{ Class.forName(possibleNames[i]); return i; }catch(Exception e){}
+        return -1;
+    }
+
+    /**
      * Finds the first method available with the specified name from the class.
      * Meant to be used in cases where a class only has one version of a method.
      * Method is accessible.
@@ -220,6 +240,7 @@ public final class SafeReflection {
     public static <T extends Enum<T>> T customEnum(Class<T> clazz, boolean addToValuesArray, String name, EnumDefinition def){
         T u;
         try {
+            if(def==null) def = new EnumDefinition();
             // Get a reference to the static method values() and get values
             Method v = clazz.getDeclaredMethod("values");
             unsafe.putBoolean(v, override, true);
@@ -397,9 +418,34 @@ public final class SafeReflection {
         }
     }
 
+    /**
+     * Gets the class that called the method where this is called from.
+     * @return Class from which your method was called.
+     */
     public static Class<?> getCallerClass(){
+        ArrayList<StackTraceElement> s = getStacktraceWithoutReflection();
+        try { return Class.forName(s.get(s.size()==2?1:2).getClassName()); } catch (ClassNotFoundException e) { }
+        assert false:"Unreachable code reached";
+        return null;
+    }
+
+    public static Method getCallerMethod(){
+        ArrayList<StackTraceElement> s = getStacktraceWithoutReflection();
+        try{
+            Method m = SafeReflection.class.getDeclaredMethod("getCallerMethod");
+            
+            return null;
+        }catch(Exception e){}
+        return null;
+    }
+
+    /**
+     * Get a stacktrace without listing reflection methods.
+     * @return Ordered list of stacktrace without method reflections steps.
+     */
+    public static ArrayList<StackTraceElement> getStacktraceWithoutReflection(){
         ArrayList<StackTraceElement> s = new ArrayList<StackTraceElement>();
-        StackTraceElement[] s1 = new Exception().getStackTrace();
+        StackTraceElement[] s1 = Thread.currentThread().getStackTrace();
         Collections.addAll(s, s1);
         s.remove(0);
         Iterator<StackTraceElement> i = s.iterator();
@@ -410,9 +456,7 @@ public final class SafeReflection {
                     || s2.contains(version+".DelegatingMethodAccessorImpl.invoke"))
                 i.remove();
         }
-        try { return Class.forName(s.get(s.size()==1?0:1).getClassName()); } catch (ClassNotFoundException e) { }
-        assert false:"Unreachable code reached";
-        return null;
+        return s;
     }
 
 }
