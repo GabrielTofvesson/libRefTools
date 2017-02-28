@@ -3,7 +3,7 @@ package com.tofvesson.async;
 import java.lang.reflect.*;
 
 @SuppressWarnings({"WeakerAccess", "unused", "unchecked"})
-public class Async<T> {
+public class Async<T> implements Awaitable{
 
     /**
      * Thread running background task.
