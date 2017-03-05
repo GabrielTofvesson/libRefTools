@@ -2,7 +2,7 @@ package com.tofvesson.async;
 
 import java.lang.reflect.*;
 
-@SuppressWarnings({"WeakerAccess", "unused", "unchecked"})
+@SuppressWarnings({"WeakerAccess", "unused", "unchecked", "SameParameterValue"})
 public class Async<T> implements Awaitable{
 
     /**
@@ -157,6 +157,13 @@ public class Async<T> implements Awaitable{
      * @param c Constructor to call.
      */
     public Async(Constructor<T> c){ this(c, (Object[]) null); }
+
+    /**
+     * Should probably only be used in debugging applications when a preset return value should be given and there is no need to start a new thread.
+     * This won't even start a new thread. All it does is set it's current state to "finished" and allow for the return value to be read.
+     * @param o Return value.
+     */
+    public Async(T o){ complete = true; ret = o; }
 
     /**
      * WARNING: Package-scoped because it should only be used when overriding standard construction. Should not bw used haphazardly!

@@ -8,11 +8,13 @@ import java.util.*;
 /**
  * Safe tools to help simplify code when dealing with reflection.
  */
+@SuppressWarnings({"unused", "SameParameterValue", "UnusedReturnValue"})
 public final class SafeReflection {
 
 
-    private static final Unsafe unsafe;
+    public static final Unsafe unsafe;
     private static final Method newInstance, aConAccess;
+    private static final Field modifiers;
     private static final String version;
     private static final long override;
     private static final boolean hasAConAccess;
@@ -20,7 +22,7 @@ public final class SafeReflection {
     static{
         Unsafe u = null;
         Method m = null, m1 = null;
-        Field f;
+        Field f = null;
         long l = 0;
         String ver = "";
         boolean b = true;
@@ -34,23 +36,30 @@ public final class SafeReflection {
             f = Unsafe.class.getDeclaredField("theUnsafe");
             f.setAccessible(true);
             u = (Unsafe) f.get(null);
-            l=u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override"));
+            f = Field.class.getDeclaredField("modifiers");
+            f.setAccessible(true);
+            try {
+                l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override")); // Most desktop versions of Java
+            }catch(Exception e){
+                l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("flag")); // God-damned Android
+            }
             try {
                 m1 = Constructor.class.getDeclaredMethod("acquireConstructorAccessor");
                 m1.setAccessible(true);
                 m = Class.forName(ver + ".DelegatingConstructorAccessorImpl").getDeclaredMethod("newInstance", Object[].class);
-                u.putBoolean(m, l, true);
+                u.putInt(m, l, 1);
             }catch(Exception e){
                 b = false;
             }
-            u.putBoolean(f, l, true);
-        }catch(Exception ignored){ ignored.printStackTrace(); }                                                                                     // Exception is never thrown
+            u.putInt(f, l, 1);
+        }catch(Exception ignored){ ignored.printStackTrace(); }                                                         // Exception is never thrown
         unsafe = u;
         newInstance = m;
         aConAccess = m1;
         override = l;
         version = ver;
         hasAConAccess = b;
+        modifiers = f;
     }
 
     /**
@@ -63,7 +72,7 @@ public final class SafeReflection {
     public static <T> Constructor<T> getConstructor(Class<T> c, Class<?>... params){
         try{
             Constructor<T> c1 = c.getConstructor(params);
-            unsafe.putBoolean(c1, override, true);
+            unsafe.putInt(c1, override, 1);
             return c1;
         }catch(Exception e){}
         return null;
@@ -79,7 +88,7 @@ public final class SafeReflection {
         try {
             @SuppressWarnings("unchecked")
             Constructor<T> c1 = (Constructor<T>) c.getDeclaredConstructors()[0];
-            unsafe.putBoolean(c1, override, true);
+            unsafe.putInt(c1, override, 1);
             return c1;
         }catch (Exception e){}
         return null;
@@ -96,7 +105,7 @@ public final class SafeReflection {
     public static Method getMethod(Class<?> c, String name, Class<?>... params){
         try{
             Method m = c.getDeclaredMethod(name, params);
-            unsafe.putBoolean(m, override, true);
+            unsafe.putInt(m, override, 1);
             return m;
         }catch(Exception e){}
         return null;
@@ -121,7 +130,7 @@ public final class SafeReflection {
      * @return Return value of method or null if method is null.
      */
     public static Object invokeMethod(Object inst, Method m, Object... params){
-        if(m!=null) unsafe.putBoolean(m, override, true);
+        if(m!=null) unsafe.putInt(m, override, 1);
         try{ return m!=null?m.invoke(inst, params):null; }catch(Exception e){}
         return null;
     }
@@ -157,7 +166,7 @@ public final class SafeReflection {
     public static Method getFirstMethod(Class<?> c, String name){
         try{
             Method[] m = c.getDeclaredMethods();
-            for (Method aM : m) if(aM.getName().equals(name)){ unsafe.putBoolean(aM, override, true); return aM;}
+            for (Method aM : m) if(aM.getName().equals(name)){ unsafe.putInt(aM, override, 1); return aM;}
         }catch(Exception e){}
         return null;
     }
@@ -171,7 +180,7 @@ public final class SafeReflection {
     public static Field getField(Class<?> c, String name){
         try{
             Field f = c.getDeclaredField(name);
-            unsafe.putBoolean(f, override, true);
+            unsafe.putInt(f, override, 1);
             return f;
         }catch(Exception e){}
         return null;
@@ -202,6 +211,28 @@ public final class SafeReflection {
     }
 
     /**
+     * Set field to specified value.
+     * <br><h1 style="text-align: center; color: red;">Please note:</h1>A JIT compiler may inline private final fields in methods which will prevent the actual value
+     * from changing at runtime.<br>This means that the value stored in the field <i>will</i> be changed, but any methods referring directly
+     * (not by java.lang.reflect.Field or sun.misc.Unsafe) to the field in the source will not be affected.
+     * This should only happen, though, if the field isn't set during runtime i.e. in a static block or constructor. This means that only fields that are truly constant
+     * like<br>"<i>public static final boolean b = false;</i>"<br>might be problematic.
+     * @param inv Object whose field to set the value of. Can be null.
+     * @param f Field to modify.
+     * @param value Value to set the field to.
+     * @return True if setting value succeeded.
+     */
+    public static boolean setFieldValue(Object inv, Field f, Object value){
+        try{
+            unsafe.putInt(f, override, 1); // Ensure field override flag is set
+            if(Modifier.isFinal(f.getModifiers()) && Modifier.isStatic(f.getModifiers())) modifiers.setInt(f, f.getModifiers() &~ Modifier.FINAL);
+            f.set(inv, value);
+            return true;
+        }catch(Exception e){ e.printStackTrace(); }
+        return false;
+    }
+
+    /**
      * Gets a reference to the enclosing class from a defined inner (nested) object.
      * @param nested Object instance of a nested class.
      * @return "this" reference to the outer class or null if class of object instance is static or isn't nested.
@@ -209,7 +240,7 @@ public final class SafeReflection {
     public static Object getEnclosingClassObjectRef(Object nested){
         try{
             Field f = nested.getClass().getDeclaredField("this$0");
-            unsafe.putBoolean(f, override, true);
+            unsafe.putInt(f, override, 1);
             return f.get(nested);
         }catch(Exception e){}
         return null;
@@ -243,7 +274,7 @@ public final class SafeReflection {
             if(def==null) def = new EnumDefinition();
             // Get a reference to the static method values() and get values
             Method v = clazz.getDeclaredMethod("values");
-            unsafe.putBoolean(v, override, true);
+            unsafe.putInt(v, override, 1);
             T[] values = (T[]) v.invoke(null);
 
             // Return object if it already exists
@@ -258,7 +289,7 @@ public final class SafeReflection {
 
             // Get enum constructor (inherited from Enum.class)
             Constructor<T> c = clazz.getDeclaredConstructor(paramList);
-            if(hasAConAccess) unsafe.putBoolean(c, override, true);
+            if(hasAConAccess) unsafe.putInt(c, override, 1);
             else c.setAccessible(true);
 
             Object[] parameters = new Object[def.params.size()+2];
@@ -307,6 +338,7 @@ public final class SafeReflection {
     /**
      * A definition for custom enum creation.
      */
+    @SuppressWarnings("UnusedReturnValue")
     public static final class EnumDefinition {
         HashMap<Object, Class> params = new HashMap<Object, Class>(); // Assign a specific type to each parameter
 
@@ -342,7 +374,7 @@ public final class SafeReflection {
          * @param b Boolean parameter.
          * @return A reference to the EnumDefinition object this method was called on (for chaining).
          */
-        public EnumDefinition putBoolean(boolean b){
+        public EnumDefinition putInt(boolean b){
             try { return putPrimitive(b);  } catch (NotAutoBoxedException e) { }
             return this;
         }
@@ -458,5 +490,4 @@ public final class SafeReflection {
         }
         return s;
     }
-
 }
