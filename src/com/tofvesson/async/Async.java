@@ -197,19 +197,22 @@ public class Async<T> implements Awaitable{
     public static <T> Async<T> current(){
         try{
             Object holder;
-            Field f = Thread.class.getDeclaredField("threadLocals");
+            Field f;
+            boolean android = false;
+            try{
+                f = Thread.class.getDeclaredField("threadLocals");
+            }catch(Exception ignored){ f = Thread.class.getDeclaredField("localValues"); android = true; }
             f.setAccessible(true);
             f = (holder=f.get(Thread.currentThread())).getClass().getDeclaredField("table");
             f.setAccessible(true);
-            boolean containsData = false;
             for(Object o : (Object[]) f.get(holder))
                 if(o != null) {
-                    if (!containsData) {
+                    if(android) holder = o;
+                    else {
                         f = o.getClass().getDeclaredField("value");
                         f.setAccessible(true);
-                        containsData = true;
                     }
-                    if((holder=f.get(o)) instanceof Async) return (Async<T>) holder;
+                    if((android?holder:(holder=f.get(o))) instanceof Async) return (Async<T>) holder;
                 }
         }catch(Exception e){}
         return null;

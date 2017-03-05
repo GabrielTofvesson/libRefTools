@@ -36,11 +36,13 @@ public final class SafeReflection {
             f = Unsafe.class.getDeclaredField("theUnsafe");
             f.setAccessible(true);
             u = (Unsafe) f.get(null);
-            f = Field.class.getDeclaredField("modifiers");
-            f.setAccessible(true);
             try {
+                f = Field.class.getDeclaredField("modifiers");
+                f.setAccessible(true);
                 l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override")); // Most desktop versions of Java
             }catch(Exception e){
+                f = Field.class.getDeclaredField("accessFlags");
+                f.setAccessible(true);
                 l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("flag")); // God-damned Android
             }
             try {
