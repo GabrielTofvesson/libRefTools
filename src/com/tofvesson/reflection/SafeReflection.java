@@ -41,7 +41,8 @@ public final class SafeReflection {
                 f.setAccessible(true);
                 l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override")); // Most desktop versions of Java
             }catch(Exception e){
-                f = Field.class.getDeclaredField("accessFlags");
+                try { f = Field.class.getDeclaredField("artField").getType().getDeclaredField("accessFlags"); }
+                catch(Exception ignored){ f = Field.class.getDeclaredField("accessFlags"); }
                 f.setAccessible(true);
                 l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("flag")); // God-damned Android
             }
