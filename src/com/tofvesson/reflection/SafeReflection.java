@@ -227,9 +227,9 @@ public final class SafeReflection {
      * @param c Class to get superclasses of.
      * @return List containing all superclasses.
      */
-    public static <T> List<Class<? super T>> getSupers(Class<T> c){
-        List<Class<? super T>> l = new ArrayList<Class<? super T>>();
-        insertSupers((List<Class<?>>) l, c);
+    public static List<Class<?>> getSupers(Class<?> c){
+        List<Class<?>> l = new ArrayList<Class<?>>();
+        insertSupers(l, c);
         return l;
     }
 
