@@ -8,7 +8,7 @@ import java.util.Collections;
 /**
  * Safe tools to help simplify code when dealing with reflection.
  */
-@SuppressWarnings({"unused", "SameParameterValue", "UnusedReturnValue", "ConstantConditions"})
+@SuppressWarnings({"unused", "SameParameterValue", "UnusedReturnValue", "ConstantConditions", "unchecked"})
 public final class SafeReflection {
 
 
@@ -44,7 +44,7 @@ public final class SafeReflection {
                 catch(Exception ignored){ f = Field.class.getDeclaredField("accessFlags"); }
                 f.setAccessible(true);
             }
-            try{
+            try {
                 l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override")); // Most desktop versions of Java
             }catch(Exception e){
                 l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("flag")); // God-damned Android
@@ -201,6 +201,7 @@ public final class SafeReflection {
      */
     public static Object getValue(Object from, Class<?> c, String name){
         try{ return getField(from!=null?from.getClass():c, name).get(from); }catch(Throwable ignored){}
+        for(Class<?> c1 : getSupers(from!=null?from.getClass():c)) try{ return getField(c1, name).get(from); }catch(Exception e){} // Find first field with the given value
         return null;
     }
 
@@ -211,6 +212,39 @@ public final class SafeReflection {
      * @return Object or null if object is null or field doesn't exist.
      */
     public static Object getValue(Class<?> c, String name){ return getValue(null, c, name); }
+
+    /**
+     * Gets the object stored in the field with the specified name in the specified class.
+     * @param supr Superclass of object to find field in.
+     * @param o Object field is associated with.
+     * @param name Name of field
+     * @return Object or null if anything goes wrong.
+     */
+    public static Object getFieldObject(Class<?> supr, Object o, String name){ try{ return getField(o.getClass(), name).get(o); }catch(Exception e){ return null; } }
+
+    /**
+     * Get a collection of all superclasses of supplied class.
+     * @param c Class to get superclasses of.
+     * @return List containing all superclasses.
+     */
+    public static <T> List<Class<? super T>> getSupers(Class<T> c){
+        List<Class<? super T>> l = new ArrayList<Class<? super T>>();
+        insertSupers((List<Class<?>>) l, c);
+        return l;
+    }
+
+    /**
+     * Internal method for inserting the immediate superclass of a supplied class in the supplied list.
+     * Only exists to reduce memory overhead when collecting supers without using a loop.
+     * @param l List of supers.
+     * @param c Class to get superclass of.
+     */
+    private static void insertSupers(List<Class<?>> l, Class<?> c){
+        if(c!=Object.class && !c.isPrimitive()){
+            l.add(c=c.getSuperclass());
+            insertSupers(l, c);
+        }
+    }
 
     /**
      * Set field to specified value.
