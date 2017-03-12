@@ -1,14 +1,14 @@
 package com.tofvesson.reflection;
 
 import sun.misc.Unsafe;
-
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.Collections;
 
 /**
  * Safe tools to help simplify code when dealing with reflection.
  */
-@SuppressWarnings({"unused", "SameParameterValue", "UnusedReturnValue"})
+@SuppressWarnings({"unused", "SameParameterValue", "UnusedReturnValue", "ConstantConditions"})
 public final class SafeReflection {
 
 
@@ -39,11 +39,14 @@ public final class SafeReflection {
             try {
                 f = Field.class.getDeclaredField("modifiers");
                 f.setAccessible(true);
-                l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override")); // Most desktop versions of Java
             }catch(Exception e){
                 try { f = Field.class.getDeclaredField("artField").getType().getDeclaredField("accessFlags"); }
                 catch(Exception ignored){ f = Field.class.getDeclaredField("accessFlags"); }
                 f.setAccessible(true);
+            }
+            try{
+                l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override")); // Most desktop versions of Java
+            }catch(Exception e){
                 l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("flag")); // God-damned Android
             }
             try {
@@ -55,7 +58,7 @@ public final class SafeReflection {
                 b = false;
             }
             u.putInt(f, l, 1);
-        }catch(Exception ignored){ ignored.printStackTrace(); }                                                         // Exception is never thrown
+        }catch(Exception ignored){ ignored.printStackTrace(); }                                                         // Exception should never be thrown
         unsafe = u;
         newInstance = m;
         aConAccess = m1;
@@ -190,27 +193,46 @@ public final class SafeReflection {
     }
 
     /**
-     * Gets the static object stored in the field with the specified name in the defined class.
-     * @param c Class to find object in.
+     * Gets the object stored in the field with the specified name in the class of the defined object.
+     * @param from Object to find object in.
+     * @param c Class to get field from (if <b>from</b> is null). This is used for static fields.
      * @param name Name of field.
      * @return Object or null if object is null or field doesn't exist.
      */
-    public static Object getStaticFieldObject(Class<?> c, String name){
-        Field f = getField(c, name);
-        try { return f!=null?f.get(null):null; } catch (Exception e) { }
+    public static Object getValue(Object from, Class<?> c, String name){
+        try{ return getField(from!=null?from.getClass():c, name).get(from); }catch(Throwable ignored){}
         return null;
     }
 
     /**
-     * Gets the object stored in the field with the specified name in the class of the defined object.
-     * @param o Object to find object in.
+     * Gets the object stored in the static field with the specified name in the class of the defined object.
+     * @param c Class to get field from (if <b>from</b> is null). This is used for static fields.
      * @param name Name of field.
      * @return Object or null if object is null or field doesn't exist.
      */
-    public static Object getFieldObject(Object o, String name){
-        Field f = getField(o.getClass(), name);
-        try{ return f!=null?f.get(o):null; }catch(Exception e){}
-        return null;
+    public static Object getValue(Class<?> c, String name){ return getValue(null, c, name); }
+
+    /**
+     * Set field to specified value.
+     * <br><h1 style="text-align: center; color: red;">Please note:</h1>A JIT compiler may inline private final fields in methods which will prevent the actual value
+     * from changing at runtime.<br>This means that the value stored in the field <i>will</i> be changed, but any methods referring directly
+     * (not by java.lang.reflect.Field or sun.misc.Unsafe) to the field in the source will not be affected.
+     * This should only happen, though, if the field isn't set during runtime i.e. in a static block or constructor. This means that only fields that are truly constant
+     * like<br>"<i>public static final boolean b = false;</i>"<br>might be problematic.
+     * @param inv Object whose field to set the value of. Can be null.
+     * @param in Class to find field in. (If inv is null)
+     * @param name Name of field to modify.
+     * @param value Value to set the field to.
+     * @param vol Whether or not the operation should be volatile.
+     * @return True if setting value succeeded.
+     */
+    public static boolean setValue(Object inv, Class<?> in, String name, Object value, boolean vol){
+        try{
+            Field f = getField(inv==null?in:inv.getClass(), name);
+            getPutMethod(f.getType(), vol).invoke(unsafe, createUnsafePutParams(inv, f, value));
+            return true;
+        }catch(Exception e){ e.printStackTrace(); }
+        return false;
     }
 
     /**
@@ -221,19 +243,55 @@ public final class SafeReflection {
      * This should only happen, though, if the field isn't set during runtime i.e. in a static block or constructor. This means that only fields that are truly constant
      * like<br>"<i>public static final boolean b = false;</i>"<br>might be problematic.
      * @param inv Object whose field to set the value of. Can be null.
-     * @param f Field to modify.
+     * @param in Class to find field in. (If inv is null)
+     * @param name Name of field to modify.
      * @param value Value to set the field to.
      * @return True if setting value succeeded.
      */
-    public static boolean setFieldValue(Object inv, Field f, Object value){
-        try{
-            unsafe.putInt(f, override, 1); // Ensure field override flag is set
-            if(Modifier.isFinal(f.getModifiers()) && Modifier.isStatic(f.getModifiers())) modifiers.setInt(f, f.getModifiers() &~ Modifier.FINAL);
-            f.set(inv, value);
-            return true;
-        }catch(Exception e){ e.printStackTrace(); }
-        return false;
-    }
+    public static boolean setValue(Object inv, Class<?> in, String name, Object value){ return setValue(inv, in, name, value, false); }
+
+    /**
+     * Set field to specified value as a volatile operations.
+     * <br><h1 style="text-align: center; color: red;">Please note:</h1>A JIT compiler may inline private final fields in methods which will prevent the actual value
+     * from changing at runtime.<br>This means that the value stored in the field <i>will</i> be changed, but any methods referring directly
+     * (not by java.lang.reflect.Field or sun.misc.Unsafe) to the field in the source will not be affected.
+     * This should only happen, though, if the field isn't set during runtime i.e. in a static block or constructor. This means that only fields that are truly constant
+     * like<br>"<i>public static final boolean b = false;</i>"<br>might be problematic.
+     * @param inv Object whose field to set the value of. Can be null.
+     * @param in Class to find field in. (If inv is null)
+     * @param name Name of field to modify.
+     * @param value Value to set the field to.
+     * @return True if setting value succeeded.
+     */
+    public static boolean setValueVolatile(Object inv, Class<?> in, String name, Object value){ return setValue(inv, in, name, value, true); }
+
+    /**
+     * Set static field to specified value.
+     * <br><h1 style="text-align: center; color: red;">Please note:</h1>A JIT compiler may inline private final fields in methods which will prevent the actual value
+     * from changing at runtime.<br>This means that the value stored in the field <i>will</i> be changed, but any methods referring directly
+     * (not by java.lang.reflect.Field or sun.misc.Unsafe) to the field in the source will not be affected.
+     * This should only happen, though, if the field isn't set during runtime i.e. in a static block or constructor. This means that only fields that are truly constant
+     * like<br>"<i>public static final boolean b = false;</i>"<br>might be problematic.
+     * @param in Class to find field in.
+     * @param name Name of field to modify.
+     * @param value Value to set the field to.
+     * @return True if setting value succeeded.
+     */
+    public static boolean setValue(Class<?> in, String name, Object value){ return setValue(null, in, name, value, false); }
+
+    /**
+     * Set static field to specified value as a volatile operation.
+     * <br><h1 style="text-align: center; color: red;">Please note:</h1>A JIT compiler may inline private final fields in methods which will prevent the actual value
+     * from changing at runtime.<br>This means that the value stored in the field <i>will</i> be changed, but any methods referring directly
+     * (not by java.lang.reflect.Field or sun.misc.Unsafe) to the field in the source will not be affected.
+     * This should only happen, though, if the field isn't set during runtime i.e. in a static block or constructor. This means that only fields that are truly constant
+     * like<br>"<i>public static final boolean b = false;</i>"<br>might be problematic.
+     * @param in Class to find field in.
+     * @param name Name of field to modify.
+     * @param value Value to set the field to.
+     * @return True if setting value succeeded.
+     */
+    public static boolean setValueVolatile(Class<?> in, String name, Object value){ return setValue(null, in, name, value, true); }
 
     /**
      * Gets a reference to the enclosing class from a defined inner (nested) object.
@@ -459,7 +517,7 @@ public final class SafeReflection {
      */
     public static Class<?> getCallerClass(){
         ArrayList<StackTraceElement> s = getStacktraceWithoutReflection();
-        try { return Class.forName(s.get(s.size()==2?1:2).getClassName()); } catch (ClassNotFoundException e) { }
+        try { return Class.forName(s.get(s.size()==3?2:s.size()==2?1:0).getClassName()); } catch (ClassNotFoundException e) { }
         assert false:"Unreachable code reached";
         return null;
     }
@@ -492,5 +550,81 @@ public final class SafeReflection {
                 i.remove();
         }
         return s;
+    }
+
+    public static Method getSetMethod(Class<?> c){
+        try {
+            Method m = Field.class.getDeclaredMethod(getSetMethodName(c), Object.class, isAutoBoxedClass(c)?unbox(c):c.isPrimitive()?c:Object.class);
+            m.setAccessible(true);
+            return m;
+        } catch (Exception e) { e.printStackTrace(); }
+        return null; // Not object version of primitive
+    }
+
+    public static String getSetMethodName(Class<?> c){
+        try {
+            String s;
+            boolean b;
+            Field f = null;
+            try{
+                f = c.getDeclaredField("value");
+            }catch(Exception e){}
+            if(f!=null) f.setAccessible(true);
+            return"set"+
+                    (f!=null && Number.class.isAssignableFrom(f.getType()) && f.getType().isPrimitive()?
+                            (s=f.getType().getSimpleName()).replaceFirst(s.charAt(0)+"", Character.toUpperCase(s.charAt(0))+""):
+                            c.isPrimitive()?(s=c.getSimpleName()).replaceFirst(s.charAt(0)+"", Character.toUpperCase(s.charAt(0))+"")
+                                    :"");
+        } catch (Exception e) { e.printStackTrace(); }
+        return null; // Not object version of primitive
+    }
+
+    public static boolean isAutoBoxedClass(final Class<?> c){
+        return Number.class.isAssignableFrom(c) && com.tofvesson.collections.Collections.arrayContains(c.getDeclaredFields(),
+                new com.tofvesson.collections.Collections.PredicateCompat() {
+                    public boolean apply(Object o) {
+                        return ((Field) o).getName().equals("value") && box(((Field) o).getType())==c;
+                    }
+                });
+    }
+
+    public static Method getPutMethod(Class<?> c, boolean vol){
+        try{
+            Method m = Unsafe.class.getDeclaredMethod(
+                    getSetMethodName(c).replaceFirst("set", "put") + (isAutoBoxedClass(c)||c.isPrimitive()?"":"Object")+(vol?"Volatile":""),
+                    Object.class,
+                    long.class,
+                    c.isPrimitive()?c:Object.class
+            );
+            m.setAccessible(true);
+            return m;
+        }catch(Exception ignored){ ignored.printStackTrace(); }
+        return null; // Something went wrong...
+    }
+
+    public static Object[] createUnsafePutParams(Object invokee, Field field, Object value){
+        return new Object[]{ invokee==null?field.getDeclaringClass():invokee, invokee==null?unsafe.staticFieldOffset(field):unsafe.objectFieldOffset(field), value };
+    }
+
+    public static Class<?> box(Class<?> c){
+        if(!c.isPrimitive()) return c;
+        if(c==int.class) return Integer.class;
+        if(c==char.class) return Character.class;
+        if(c==byte.class) return Byte.class;
+        if(c==float.class) return Float.class;
+        if(c==long.class) return Long.class;
+        if(c==boolean.class) return Boolean.class;
+        return Double.class;
+    }
+
+    public static Class<?> unbox(Class<?> c){
+        if(c.isPrimitive()) return c;
+        if(c==Integer.class) return int.class;
+        if(c==Character.class) return char.class;
+        if(c==Byte.class) return byte.class;
+        if(c==Float.class) return float.class;
+        if(c==Long.class) return long.class;
+        if(c==Boolean.class) return boolean.class;
+        return double.class;
     }
 }

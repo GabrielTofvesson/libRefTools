@@ -164,11 +164,11 @@ public class Async<T> implements Awaitable{
      * @param o Return value.
      */
     public Async(T o){ complete = true; ret = o; }
-
     /**
      * WARNING: Package-scoped because it should only be used when overriding standard construction. Should not bw used haphazardly!
      */
     Async() { task = null; }
+
 
     /**
      * Await completion of async task. Blocks thread if task isn't complete.
