@@ -1,5 +1,6 @@
 package com.tofvesson.reflection;
 
+import com.sun.istack.internal.NotNull;
 import sun.misc.Unsafe;
 import java.lang.reflect.*;
 import java.util.*;
@@ -206,6 +207,14 @@ public final class SafeReflection {
     }
 
     /**
+     * Gets the object stored in the field with the specified name in the class of the defined object.
+     * @param from Object to find object in.
+     * @param name Name of field.
+     * @return Object or null if object is null or field doesn't exist.
+     */
+    public static Object getValue(@NotNull Object from, String name){ return getValue(from, null, name); }
+
+    /**
      * Gets the object stored in the static field with the specified name in the class of the defined object.
      * @param c Class to get field from (if <b>from</b> is null). This is used for static fields.
      * @param name Name of field.
@@ -254,7 +263,7 @@ public final class SafeReflection {
      * This should only happen, though, if the field isn't set during runtime i.e. in a static block or constructor. This means that only fields that are truly constant
      * like<br>"<i>public static final boolean b = false;</i>"<br>might be problematic.
      * @param inv Object whose field to set the value of. Can be null.
-     * @param in Class to find field in. (If inv is null)
+     * @param in Class to find field in
      * @param name Name of field to modify.
      * @param value Value to set the field to.
      * @param vol Whether or not the operation should be volatile.
@@ -262,10 +271,16 @@ public final class SafeReflection {
      */
     public static boolean setValue(Object inv, Class<?> in, String name, Object value, boolean vol){
         try{
-            Field f = getField(inv==null?in:inv.getClass(), name);
+            Field f = getField(in, name); // Search defined class first
             getPutMethod(f.getType(), vol).invoke(unsafe, createUnsafePutParams(inv, f, value));
             return true;
         }catch(Exception e){ e.printStackTrace(); }
+        for(Class<?> c : getSupers(inv==null?in:inv.getClass())) // Hierarchical upward search
+            try{
+                Field f = getField(c, name);
+                getPutMethod(f.getType(), vol).invoke(unsafe, createUnsafePutParams(inv, f, value));
+                return true;
+            }catch(Exception e){ e.printStackTrace(); }
         return false;
     }
 
@@ -285,7 +300,7 @@ public final class SafeReflection {
     public static boolean setValue(Object inv, Class<?> in, String name, Object value){ return setValue(inv, in, name, value, false); }
 
     /**
-     * Set field to specified value as a volatile operations.
+     * Set field to specified value as a volatile operation.
      * <br><h1 style="text-align: center; color: red;">Please note:</h1>A JIT compiler may inline private final fields in methods which will prevent the actual value
      * from changing at runtime.<br>This means that the value stored in the field <i>will</i> be changed, but any methods referring directly
      * (not by java.lang.reflect.Field or sun.misc.Unsafe) to the field in the source will not be affected.
@@ -298,6 +313,34 @@ public final class SafeReflection {
      * @return True if setting value succeeded.
      */
     public static boolean setValueVolatile(Object inv, Class<?> in, String name, Object value){ return setValue(inv, in, name, value, true); }
+
+    /**
+     * Set field to specified value.
+     * <br><h1 style="text-align: center; color: red;">Please note:</h1>A JIT compiler may inline private final fields in methods which will prevent the actual value
+     * from changing at runtime.<br>This means that the value stored in the field <i>will</i> be changed, but any methods referring directly
+     * (not by java.lang.reflect.Field or sun.misc.Unsafe) to the field in the source will not be affected.
+     * This should only happen, though, if the field isn't set during runtime i.e. in a static block or constructor. This means that only fields that are truly constant
+     * like<br>"<i>public static final boolean b = false;</i>"<br>might be problematic.
+     * @param inv Object whose field to set the value of. Can be null.
+     * @param name Name of field to modify.
+     * @param value Value to set the field to.
+     * @return True if setting value succeeded.
+     */
+    public static boolean setValue(Object inv, String name, Object value){ return setValue(inv, inv.getClass(), name, value, false); }
+
+    /**
+     * Set field to specified value as a volatile operation.
+     * <br><h1 style="text-align: center; color: red;">Please note:</h1>A JIT compiler may inline private final fields in methods which will prevent the actual value
+     * from changing at runtime.<br>This means that the value stored in the field <i>will</i> be changed, but any methods referring directly
+     * (not by java.lang.reflect.Field or sun.misc.Unsafe) to the field in the source will not be affected.
+     * This should only happen, though, if the field isn't set during runtime i.e. in a static block or constructor. This means that only fields that are truly constant
+     * like<br>"<i>public static final boolean b = false;</i>"<br>might be problematic.
+     * @param inv Object whose field to set the value of. Can be null.
+     * @param name Name of field to modify.
+     * @param value Value to set the field to.
+     * @return True if setting value succeeded.
+     */
+    public static boolean setValueVolatile(Object inv, String name, Object value){ return setValue(inv, inv.getClass(), name, value, true); }
 
     /**
      * Set static field to specified value.
