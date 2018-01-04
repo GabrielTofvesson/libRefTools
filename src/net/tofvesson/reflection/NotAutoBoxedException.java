@@ -1,4 +1,4 @@
-package com.tofvesson.reflection;
+package net.tofvesson.reflection;
 
 public class NotAutoBoxedException extends Exception {
     public NotAutoBoxedException(){ super(); }

@@ -1,18 +1,17 @@
-package com.tofvesson.reflection;
+package net.tofvesson.reflection;
 
-import com.sun.istack.internal.NotNull;
+import net.tofvesson.collections.Optional;
 import sun.misc.Unsafe;
 import java.lang.reflect.*;
 import java.util.*;
-import java.util.Collections;
 
 /**
  * Safe tools to help simplify code when dealing with reflection.
  */
-@SuppressWarnings({"unused", "SameParameterValue", "UnusedReturnValue", "ConstantConditions", "unchecked"})
+@SuppressWarnings({"unused", "SameParameterValue", "UnusedReturnValue", "ConstantConditions", "unchecked", "JavaReflectionMemberAccess"})
 public final class SafeReflection {
 
-
+    public static final ClassLoader rootClassLoader;
     public static final Unsafe unsafe;
     private static final Method newInstance, aConAccess;
     private static final Field modifiers;
@@ -25,11 +24,12 @@ public final class SafeReflection {
         Method m = null, m1 = null;
         Field f = null;
         long l = 0;
-        String ver = "";
+        String ver;
         boolean b = true;
         //Get package based on java version (Java 9+ use "jdk.internal.reflect" while "sun.reflect" is used by earlier versions)
         try{
             ClassLoader.getSystemClassLoader().loadClass("jdk.internal.reflect.DelegatingConstructorAccessorImpl");
+            ver="jdk.internal.reflect";
         }catch(Throwable ignored){
             ver="sun.reflect"; // If class can't be found in sun.reflect; we know that user is running Java 9+
         }
@@ -39,11 +39,9 @@ public final class SafeReflection {
             u = (Unsafe) f.get(null);
             try {
                 f = Field.class.getDeclaredField("modifiers");
-                f.setAccessible(true);
             }catch(Exception e){
                 try { f = Field.class.getDeclaredField("artField").getType().getDeclaredField("accessFlags"); }
                 catch(Exception ignored){ f = Field.class.getDeclaredField("accessFlags"); }
-                f.setAccessible(true);
             }
             try {
                 l = u.objectFieldOffset(AccessibleObject.class.getDeclaredField("override")); // Most desktop versions of Java
@@ -52,7 +50,7 @@ public final class SafeReflection {
             }
             try {
                 m1 = Constructor.class.getDeclaredMethod("acquireConstructorAccessor");
-                m1.setAccessible(true);
+                u.putInt(m1, l, 1);
                 m = Class.forName(ver + ".DelegatingConstructorAccessorImpl").getDeclaredMethod("newInstance", Object[].class);
                 u.putInt(m, l, 1);
             }catch(Exception e){
@@ -67,6 +65,24 @@ public final class SafeReflection {
         version = ver;
         hasAConAccess = b;
         modifiers = f;
+
+        ClassLoader cl = ClassLoader.getSystemClassLoader();
+        while(cl.getParent()!=null) cl = cl.getParent();
+        rootClassLoader = cl;
+    }
+
+    public static Object getFieldValue(Field f, Object o){
+        try{
+            return o==null?unsafe.getObject(f.getDeclaringClass(), unsafe.staticFieldOffset(f)):unsafe.getObject(o, unsafe.objectFieldOffset(f));
+        }catch(Exception e){ throw new RuntimeException(e); } // Fatal and unexpected error
+    }
+
+    /**
+     * Java 9-safe version of {@link Field#setAccessible(boolean)}
+     * @param f Field to set accessible
+     */
+    private static void setAccessible(AccessibleObject f){
+        unsafe.putInt(f, override, 1);
     }
 
     /**
@@ -201,8 +217,8 @@ public final class SafeReflection {
      * @return Object or null if object is null or field doesn't exist.
      */
     public static Object getValue(Object from, Class<?> c, String name){
-        try{ return getField(from!=null?from.getClass():c, name).get(from); }catch(Throwable ignored){}
-        for(Class<?> c1 : getSupers(from!=null?from.getClass():c)) try{ return getField(c1, name).get(from); }catch(Exception e){} // Find first field with the given value
+        try{ return getFieldValue(getField(from!=null?from.getClass():c, name), from); }catch(Throwable ignored){}
+        for(Class<?> c1 : getSupers(from!=null?from.getClass():c)) try{ return getFieldValue(getField(c1, name), from); }catch(Exception e){} // Find first field with the given value
         return null;
     }
 
@@ -212,7 +228,7 @@ public final class SafeReflection {
      * @param name Name of field.
      * @return Object or null if object is null or field doesn't exist.
      */
-    public static Object getValue(@NotNull Object from, String name){ return getValue(from, null, name); }
+    public static Object getValue(Object from, String name){ return getValue(from, null, name); }
 
     /**
      * Gets the object stored in the static field with the specified name in the class of the defined object.
@@ -229,7 +245,7 @@ public final class SafeReflection {
      * @param name Name of field
      * @return Object or null if anything goes wrong.
      */
-    public static Object getFieldObject(Class<?> supr, Object o, String name){ try{ return getField(o.getClass(), name).get(o); }catch(Exception e){ return null; } }
+    public static Object getFieldObject(Class<?> supr, Object o, String name){ try{ return getFieldValue(getField(o.getClass(), name), o); }catch(Exception e){ return null; } }
 
     /**
      * Get a collection of all superclasses of supplied class.
@@ -253,6 +269,19 @@ public final class SafeReflection {
             l.add(c=c.getSuperclass());
             insertSupers(l, c);
         }
+    }
+
+    public static Optional<Object> lazyCall(Class<?> in, Object on, String name, Object... params){
+        for(Method m : in.getDeclaredMethods())
+            if(m.getName().equals(name))
+                try{
+                    SafeReflection.setAccessible(m);
+                    return Optional.ofNullable(m.invoke(on, (Object[]) params));
+                }
+                catch (IllegalArgumentException e){ }
+                catch (IllegalAccessException e) { throw new RuntimeException(e); }
+                catch (InvocationTargetException e) { throw new RuntimeException(e.getCause()); }
+        return Optional.empty();
     }
 
     /**
@@ -378,8 +407,8 @@ public final class SafeReflection {
     public static Object getEnclosingClassObjectRef(Object nested){
         try{
             Field f = nested.getClass().getDeclaredField("this$0");
-            unsafe.putInt(f, override, 1);
-            return f.get(nested);
+            //unsafe.putInt(f, override, 1);
+            return getFieldValue(f, nested);
         }catch(Exception e){}
         return null;
     }
@@ -428,7 +457,7 @@ public final class SafeReflection {
             // Get enum constructor (inherited from Enum.class)
             Constructor<T> c = clazz.getDeclaredConstructor(paramList);
             if(hasAConAccess) unsafe.putInt(c, override, 1);
-            else c.setAccessible(true);
+            else setAccessible(c);
 
             Object[] parameters = new Object[def.params.size()+2];
             parameters[0] = name;
@@ -442,7 +471,7 @@ public final class SafeReflection {
 
             // Get the final name field from Enum.class and make it temporarily modifiable
             Field f = Enum.class.getDeclaredField("name");
-            f.setAccessible(true);
+            setAccessible(f);
 
             // Rename the newly created enum to the requested name
             f.set(u, name);
@@ -451,7 +480,7 @@ public final class SafeReflection {
 
             // Get the current values field from Enum (a female dog to modify)
             f = clazz.getDeclaredField("$VALUES");
-            f.setAccessible(true);
+            setAccessible(f);
             T[] $VALUES = (T[]) Array.newInstance(clazz, values.length+1);
             System.arraycopy(values, 0, $VALUES, 0, values.length); // Copy over values from old array
             $VALUES[values.length] = u; // Add out custom enum to our local array
@@ -594,18 +623,8 @@ public final class SafeReflection {
      */
     public static Class<?> getCallerClass(){
         ArrayList<StackTraceElement> s = getStacktraceWithoutReflection();
-        try { return Class.forName(s.get(s.size()==3?2:s.size()==2?1:0).getClassName()); } catch (ClassNotFoundException e) { }
+        try { return Class.forName(s.get(s.size()>3?3:s.size()-1).getClassName()); } catch (ClassNotFoundException e) { }
         assert false:"Unreachable code reached";
-        return null;
-    }
-
-    public static Method getCallerMethod(){
-        ArrayList<StackTraceElement> s = getStacktraceWithoutReflection();
-        try{
-            Method m = SafeReflection.class.getDeclaredMethod("getCallerMethod");
-            
-            return null;
-        }catch(Exception e){}
         return null;
     }
 
@@ -629,10 +648,10 @@ public final class SafeReflection {
         return s;
     }
 
-    public static Method getSetMethod(Class<?> c){
+    private static Method getSetMethod(Class<?> c){
         try {
             Method m = Field.class.getDeclaredMethod(getSetMethodName(c), Object.class, isAutoBoxedClass(c)?unbox(c):c.isPrimitive()?c:Object.class);
-            m.setAccessible(true);
+            setAccessible(m);
             return m;
         } catch (Exception e) { e.printStackTrace(); }
         return null; // Not object version of primitive
@@ -646,7 +665,7 @@ public final class SafeReflection {
             try{
                 f = c.getDeclaredField("value");
             }catch(Exception e){}
-            if(f!=null) f.setAccessible(true);
+            if(f!=null) setAccessible(f);
             return"set"+
                     (f!=null && Number.class.isAssignableFrom(f.getType()) && f.getType().isPrimitive()?
                             (s=f.getType().getSimpleName()).replaceFirst(s.charAt(0)+"", Character.toUpperCase(s.charAt(0))+""):
@@ -657,8 +676,8 @@ public final class SafeReflection {
     }
 
     public static boolean isAutoBoxedClass(final Class<?> c){
-        return Number.class.isAssignableFrom(c) && com.tofvesson.collections.Collections.arrayContains(c.getDeclaredFields(),
-                new com.tofvesson.collections.Collections.PredicateCompat() {
+        return Number.class.isAssignableFrom(c) && net.tofvesson.collections.Collections.arrayContains(c.getDeclaredFields(),
+                new net.tofvesson.collections.Collections.PredicateCompat() {
                     public boolean apply(Object o) {
                         return ((Field) o).getName().equals("value") && box(((Field) o).getType())==c;
                     }
@@ -673,7 +692,7 @@ public final class SafeReflection {
                     long.class,
                     c.isPrimitive()?c:Object.class
             );
-            m.setAccessible(true);
+            setAccessible(m);
             return m;
         }catch(Exception ignored){ ignored.printStackTrace(); }
         return null; // Something went wrong...

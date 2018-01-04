@@ -1,9 +1,35 @@
-package com.tofvesson.async;
+package net.tofvesson.async;
+
+import net.tofvesson.collections.Pair;
+import net.tofvesson.reflection.Classes;
+import net.tofvesson.reflection.SafeReflection;
+import jdk.internal.org.objectweb.asm.ClassWriter;
+import jdk.internal.org.objectweb.asm.MethodVisitor;
+import jdk.internal.org.objectweb.asm.Opcodes;
 
 import java.lang.reflect.*;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Vector;
 
-@SuppressWarnings({"WeakerAccess", "unused", "unchecked", "SameParameterValue"})
+@SuppressWarnings({"WeakerAccess", "unused", "unchecked", "SameParameterValue", "JavaReflectionMemberAccess"})
 public class Async<T> implements Awaitable{
+
+    private static final Field threadLocals;
+    private static final boolean android;
+
+    static{
+        Field f = null;
+        boolean $android = false;
+        try{
+            try{
+                f = Thread.class.getDeclaredField("threadLocals");
+            }catch(Exception ignored){ f = Thread.class.getDeclaredField("localValues"); $android = true; }
+        }catch(Exception e){ e.printStackTrace(); }
+        threadLocals = f;
+        android = $android;
+    }
+
 
     /**
      * Thread running background task.
@@ -29,6 +55,8 @@ public class Async<T> implements Awaitable{
      * Exception to throw in case something goes wrong.
      */
     volatile Throwable t;
+
+    private final LinkedHashMap<String, Object> asyncLocals = new LinkedHashMap<String, Object>();
 
     /**
      * Create Async object for sleeping for a while.
@@ -197,22 +225,13 @@ public class Async<T> implements Awaitable{
     public static <T> Async<T> current(){
         try{
             Object holder;
-            Field f;
-            boolean android = false;
-            try{
-                f = Thread.class.getDeclaredField("threadLocals");
-            }catch(Exception ignored){ f = Thread.class.getDeclaredField("localValues"); android = true; }
-            f.setAccessible(true);
-            f = (holder=f.get(Thread.currentThread())).getClass().getDeclaredField("table");
-            f.setAccessible(true);
-            for(Object o : (Object[]) f.get(holder))
+            Field f = threadLocals;
+            f = (holder= SafeReflection.getFieldValue(f, Thread.currentThread())).getClass().getDeclaredField("table");
+            for(Object o : (Object[]) SafeReflection.getFieldValue(f, holder))
                 if(o != null) {
                     if(android) holder = o;
-                    else {
-                        f = o.getClass().getDeclaredField("value");
-                        f.setAccessible(true);
-                    }
-                    if((android?holder:(holder=f.get(o))) instanceof Async) return (Async<T>) holder;
+                    else f = o.getClass().getDeclaredField("value");
+                    if((android?holder:(holder=SafeReflection.getFieldValue(f, o))) instanceof Async) return (Async<T>) holder;
                 }
         }catch(Exception e){}
         return null;
@@ -267,10 +286,19 @@ public class Async<T> implements Awaitable{
     }
 
     /**
+     * Get a map of values local to this async object.
+     * @return Map of values if called from this async task, otherwise throw exception
+     */
+    public Map<String, Object> getLocals(){
+        if(!this.equals(Async.<T>current())) throw new IllegalCallerThreadException("Cannot get locals from another thread!");
+        return asyncLocals;
+    }
+
+    /**
      * Checks for dangerous calls to Async methods such as awaiting oneself (which would cause a freeze in that thread).
      */
-    protected void checkDangerousThreadedAction(){
-        if(this.equals(current())) throw new RuntimeException("Calling dangerous method from inside thread is forbidden!");
+    protected final void checkDangerousThreadedAction(){
+        if(this.equals(current())) throw new IllegalCallerThreadException("Calling dangerous method from inside thread is forbidden!");
     }
 
     /**

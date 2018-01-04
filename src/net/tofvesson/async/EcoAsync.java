@@ -1,5 +1,7 @@
-package com.tofvesson.async;
+package net.tofvesson.async;
 
+
+import net.tofvesson.reflection.SafeReflection;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -13,26 +15,12 @@ import java.lang.reflect.Method;
 @SuppressWarnings("unused")
 public class EcoAsync<T> extends Async<T> {
 
-    private static final Field threadTarget, runnableObjToCall, runnableMethod, runnableParams;
+    private static final Field
+            threadTarget = SafeReflection.getField(Thread.class, "target"),
+            runnableObjToCall = SafeReflection.getField(EcoRunnable.class, "val$o"),
+            runnableMethod = SafeReflection.getField(EcoRunnable.class, "val$method"),
+            runnableParams = SafeReflection.getField(EcoRunnable.class, "val$params");
     private Thread previousThread;
-
-    static{
-        Field f4 = null, f3 = null, f2 = null, f1 = null;
-        try{
-            f1 = Thread.class.getDeclaredField("target");
-            f1.setAccessible(true);
-            f2 = EcoAsync$1.class.getDeclaredField("val$o");
-            f2.setAccessible(true);
-            f3 = EcoAsync$1.class.getDeclaredField("val$method");
-            f3.setAccessible(true);
-            f4 = EcoAsync$1.class.getDeclaredField("val$params");
-            f4.setAccessible(true);
-        }catch(Exception ignored){}
-        threadTarget = f1;
-        runnableObjToCall = f2;
-        runnableMethod = f3;
-        runnableParams = f4;
-    }
 
     /**
      * Initiates an economic version of async task that invokes the defined method. If object is null, the method must be static.
@@ -143,6 +131,7 @@ public class EcoAsync<T> extends Async<T> {
     @Override
     public T await() {
         checkDangerousThreadedAction();
+        if(!isAlive()) throw new IllegalStateException("Cannot await async that isn't alive!");
         //noinspection StatementWithEmptyBody
         while(!failed && !complete);
         if(ret==null && t!=null){
@@ -156,7 +145,7 @@ public class EcoAsync<T> extends Async<T> {
 
     @Override
     public boolean isAlive() {
-        return !super.failed && !complete && previousThread!=null; // Due to the overridden operation, we need another way of checking if worker is alive.
+        return !super.failed && !complete && task!=null && task.isAlive(); // Due to the overridden operation, we need another way of checking if worker is alive.
     }
 
     @Override
@@ -177,7 +166,7 @@ public class EcoAsync<T> extends Async<T> {
         if(isAlive()) cancel();
         // Dig parameters out from memory rather than wasting space with our own copy
         try {
-            EcoAsync$1 t_run = (EcoAsync$1) threadTarget.get(task);
+            EcoRunnable t_run = (EcoRunnable) threadTarget.get(task);
             newThread(runnableObjToCall.get(t_run),
                     (Method) runnableMethod.get(t_run),
                     (Object[]) runnableParams.get(t_run));
@@ -188,7 +177,7 @@ public class EcoAsync<T> extends Async<T> {
     void newThread(Object o, Method method, Object... params){
         previousThread = null;
         try {
-            task = new Thread(new EcoAsync$1(this, o, method, params), "Worker_"+method.getDeclaringClass().getName()+"_"+method.getName());
+            task = new Thread(new EcoRunnable(this, o, method, params), "Worker_"+method.getDeclaringClass().getName()+"_"+method.getName());
             task.setDaemon(true);
         } catch (Exception ignored) { }
     }

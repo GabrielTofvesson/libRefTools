@@ -2,7 +2,7 @@
   <artifact type="jar" name="libRefTools:jar">
     <output-path>$PROJECT_DIR$/out/artifacts/libRefTools_jar</output-path>
     <root id="archive" name="libRefTools.jar">
-      <element id="module-output" name="libGTools" />
+      <element id="module-output" name="libRefTools" />
       <element id="dir-copy" path="$PROJECT_DIR$/src" />
       <element id="file-copy" path="$PROJECT_DIR$/README.txt" />
       <element id="file-copy" path="$PROJECT_DIR$/COPYING.txt" />

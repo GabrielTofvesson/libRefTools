@@ -1,4 +1,4 @@
-package com.tofvesson.async;
+package net.tofvesson.async;
 
 public interface BatchRunnable {
     void run(int index);

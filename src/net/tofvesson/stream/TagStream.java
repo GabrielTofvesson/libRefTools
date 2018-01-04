@@ -1,4 +1,4 @@
-package com.tofvesson.logging;
+package net.tofvesson.stream;
 
 import java.io.IOException;
 import java.io.OutputStream;

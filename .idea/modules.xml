@@ -2,7 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/libGTools.iml" filepath="$PROJECT_DIR$/libGTools.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Tests/Tests.iml" filepath="$PROJECT_DIR$/Tests/Tests.iml" />
+      <module fileurl="file://$PROJECT_DIR$/libRefTools.iml" filepath="$PROJECT_DIR$/libRefTools.iml" />
     </modules>
   </component>
 </project>
