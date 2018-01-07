@@ -1,4 +1,4 @@
-This file is part of Async.
+This file is part of libRefTools.
 
 libGTools is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -11,9 +11,9 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with libGTools.	If not, see <http://www.gnu.org/licenses/>.
+along with libRefTools.	If not, see <http://www.gnu.org/licenses/>.
 
-For further questions regarding your rights to libGTools, please contact Gabriel Tofvesson either by email at
+For further questions regarding your rights to libRefTools, please contact Gabriel Tofvesson either by email at
 gabriel.tofvesson@gmail.com
 or by mail at
 Bo Bergmans gata 9, 115 50, Stockholm, Sweden
